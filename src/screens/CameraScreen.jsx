@@ -6,10 +6,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import CameraProvider from '../clients/CameraProvider';
-import { API_BASE_URL } from '../config';
+import { DEV_API_BASE_URL, PROD_API_BASE_URL } from '../config';
 
 const LABEL_OPTIONS = [
   { label: 'Auto-detect from camera', value: '' },
@@ -20,12 +21,15 @@ const LABEL_OPTIONS = [
 
 export default function CameraScreen() {
   const cameraProviderRef = useRef(null);
+  const [apiMode, setApiMode] = useState('production');
+  const [devBaseUrl, setDevBaseUrl] = useState(DEV_API_BASE_URL);
   const [selectedLabel, setSelectedLabel] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
+  const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -56,7 +60,7 @@ export default function CameraScreen() {
         }
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/recognize`, {
+      const response = await fetch(`${apiBaseUrl}/api/recognize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -90,6 +94,57 @@ export default function CameraScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Camera + Label Demo</Text>
+
+        <Text style={styles.label}>API environment</Text>
+        <View style={styles.modeRow}>
+          <Pressable
+            onPress={() => setApiMode('development')}
+            style={[
+              styles.modeButton,
+              apiMode === 'development' ? styles.modeButtonActive : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.modeButtonText,
+                apiMode === 'development' ? styles.modeButtonTextActive : null,
+              ]}
+            >
+              Dev
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setApiMode('production')}
+            style={[
+              styles.modeButton,
+              apiMode === 'production' ? styles.modeButtonActive : null,
+            ]}
+          >
+            <Text
+              style={[
+                styles.modeButtonText,
+                apiMode === 'production' ? styles.modeButtonTextActive : null,
+              ]}
+            >
+              Production
+            </Text>
+          </Pressable>
+        </View>
+
+        {apiMode === 'development' ? (
+          <View style={styles.devUrlBlock}>
+            <Text style={styles.label}>Dev base URL</Text>
+            <TextInput
+              value={devBaseUrl}
+              onChangeText={setDevBaseUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.urlInput}
+              placeholder="http://192.168.x.x:8080"
+            />
+          </View>
+        ) : null}
+        <Text style={styles.endpointText}>Using: {apiBaseUrl}</Text>
 
         <CameraProvider ref={cameraProviderRef} />
 
@@ -178,6 +233,46 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     color: '#444',
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modeButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: '#1f7a4d',
+    borderColor: '#1f7a4d',
+  },
+  modeButtonText: {
+    color: '#222',
+    fontWeight: '600',
+  },
+  modeButtonTextActive: {
+    color: '#fff',
+  },
+  devUrlBlock: {
+    gap: 6,
+  },
+  urlInput: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+  },
+  endpointText: {
+    fontSize: 12,
+    color: '#666',
   },
   dropdownTrigger: {
     minHeight: 44,
