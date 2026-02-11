@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,45 +8,79 @@ import {
   Text,
   View,
 } from 'react-native';
+import CameraProvider from '../clients/CameraProvider';
 import { API_BASE_URL } from '../config';
 
 const LABEL_OPTIONS = [
-  'Single-use Plastic Bottle',
-  'Paper Coffee Cup',
-  'LED Light Bulb',
+  { label: 'Auto-detect from camera', value: '' },
+  { label: 'Single-use Plastic Bottle', value: 'Single-use Plastic Bottle' },
+  { label: 'Paper Coffee Cup', value: 'Paper Coffee Cup' },
+  { label: 'LED Light Bulb', value: 'LED Light Bulb' },
 ];
 
 export default function CameraScreen() {
-  const [selectedLabel, setSelectedLabel] = useState(LABEL_OPTIONS[0]);
+  const cameraProviderRef = useRef(null);
+  const [selectedLabel, setSelectedLabel] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
 
   const handleAnalyze = async () => {
     setLoading(true);
     setError('');
+    setMessage('');
     setResult(null);
 
     try {
+      const payload = {
+        detectedLabel: selectedLabel,
+        confidence: 0.9,
+      };
+
+      if (!selectedLabel) {
+        try {
+          const imageBase64 = await cameraProviderRef.current?.captureImage();
+          if (!imageBase64) {
+            throw new Error('No image was captured.');
+          }
+          payload.imageBase64 = imageBase64;
+        } catch (captureError) {
+          const fallbackLabel = LABEL_OPTIONS[1].value;
+          payload.detectedLabel = fallbackLabel;
+          setSelectedLabel(fallbackLabel);
+          setMessage(
+            `Camera capture unavailable (${captureError.message}). Falling back to manual label.`
+          );
+        }
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/recognize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          detectedLabel: selectedLabel,
-          confidence: 0.9,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        data = null;
+      }
+
       if (!response.ok) {
         throw new Error(data?.message || `Request failed (${response.status})`);
       }
       setResult(data);
     } catch (fetchError) {
-      setError(fetchError.message || 'Could not reach the backend.');
+      setError(
+        fetchError.message
+          ? `Could not analyze right now: ${fetchError.message}`
+          : 'Could not analyze right now. Please check app and backend logs.'
+      );
     } finally {
       setLoading(false);
     }
@@ -55,14 +89,19 @@ export default function CameraScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Manual Label Demo</Text>
+        <Text style={styles.title}>Camera + Label Demo</Text>
 
-        <Text style={styles.label}>Select label</Text>
+        <CameraProvider ref={cameraProviderRef} />
+
+        <Text style={styles.label}>Manual label (optional)</Text>
         <Pressable
           onPress={() => setIsDropdownOpen((prev) => !prev)}
           style={styles.dropdownTrigger}
         >
-          <Text>{selectedLabel}</Text>
+          <Text>
+            {LABEL_OPTIONS.find((option) => option.value === selectedLabel)?.label ||
+              LABEL_OPTIONS[0].label}
+          </Text>
           <Text style={styles.caret}>{isDropdownOpen ? '▲' : '▼'}</Text>
         </Pressable>
 
@@ -70,14 +109,14 @@ export default function CameraScreen() {
           <View style={styles.dropdownList}>
             {LABEL_OPTIONS.map((option) => (
               <Pressable
-                key={option}
+                key={option.label}
                 onPress={() => {
-                  setSelectedLabel(option);
+                  setSelectedLabel(option.value);
                   setIsDropdownOpen(false);
                 }}
                 style={styles.dropdownItem}
               >
-                <Text>{option}</Text>
+                <Text>{option.label}</Text>
               </Pressable>
             ))}
           </View>
@@ -99,15 +138,16 @@ export default function CameraScreen() {
           )}
         </Pressable>
 
+        {message ? <Text style={styles.messageText}>{message}</Text> : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {result ? (
           <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>{result.title || 'Result'}</Text>
+            <Text style={styles.resultTitle}>{result.title || result.name || 'Result'}</Text>
             <Text style={styles.resultItem}>ecoScore: {String(result.ecoScore ?? '-')}</Text>
             <Text style={styles.resultItem}>co2Gram: {String(result.co2Gram ?? '-')}</Text>
             <Text style={styles.resultItem}>
-              suggestion: {String(result.suggestion ?? '-')}
+              suggestion: {String(result.suggestion ?? result.altRecommendation ?? '-')}
             </Text>
             <Text style={styles.resultItem}>
               explanation: {String(result.explanation ?? '-')}
@@ -187,6 +227,9 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#b00020',
+  },
+  messageText: {
+    color: '#2a5f3b',
   },
   resultCard: {
     backgroundColor: '#fff',
