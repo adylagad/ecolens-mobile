@@ -13,6 +13,22 @@ const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '';
 
 function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
+  if (Platform.OS === 'ios' && !GOOGLE_IOS_CLIENT_ID) {
+    return (
+      <Pressable disabled style={[styles.googleButton, styles.googleButtonDisabled]}>
+        <Text style={styles.googleButtonText}>Continue with Google</Text>
+      </Pressable>
+    );
+  }
+
+  if (Platform.OS === 'android' && !GOOGLE_ANDROID_CLIENT_ID) {
+    return (
+      <Pressable disabled style={[styles.googleButton, styles.googleButtonDisabled]}>
+        <Text style={styles.googleButtonText}>Continue with Google</Text>
+      </Pressable>
+    );
+  }
+
   const googleConfig = {
     webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
     expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
