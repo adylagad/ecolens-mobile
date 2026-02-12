@@ -43,7 +43,7 @@ export default function CameraScreen() {
 
     try {
       const payload = {
-        detectedLabel: selectedLabel,
+        detectedLabel: '',
         confidence: 0.9,
       };
 
@@ -59,11 +59,10 @@ export default function CameraScreen() {
           }
           payload.imageBase64 = imageBase64;
         } catch (captureError) {
-          const fallbackLabel = LABEL_OPTIONS[2].value;
-          payload.detectedLabel = fallbackLabel;
-          setSelectedLabel(fallbackLabel);
+          const imageBase64 = await loadDefaultImageBase64();
+          payload.imageBase64 = imageBase64;
           setMessage(
-            `Camera capture unavailable (${captureError.message}). Falling back to manual label.`
+            `Camera capture unavailable (${captureError.message}). Using bundled test image instead.`
           );
         }
       }
