@@ -110,7 +110,7 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
   );
 }
 
-export default function LoginScreen({ themeName = 'dark', setThemeName = () => {}, onLogin = () => {} }) {
+export default function LoginScreen({ themeName = 'dark', onLogin = () => {} }) {
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [authError, setAuthError] = useState('');
@@ -138,25 +138,6 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
         </View>
 
         <View style={styles.actionsCard}>
-          <View style={styles.themeRow}>
-            <Pressable
-              onPress={() => setThemeName('light')}
-              style={[styles.themeButton, themeName === 'light' ? styles.themeButtonActive : null]}
-            >
-              <Text style={[styles.themeText, themeName === 'light' ? styles.themeTextActive : null]}>
-                Light
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setThemeName('dark')}
-              style={[styles.themeButton, themeName === 'dark' ? styles.themeButtonActive : null]}
-            >
-              <Text style={[styles.themeText, themeName === 'dark' ? styles.themeTextActive : null]}>
-                Dark
-              </Text>
-            </Pressable>
-          </View>
-
           {canUseGoogleAuth ? (
             <GoogleSignInButton
               styles={styles}
@@ -235,31 +216,6 @@ function createStyles(palette) {
       borderRadius: 16,
       padding: 14,
       gap: 10,
-    },
-    themeRow: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    themeButton: {
-      flex: 1,
-      minHeight: 42,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.input,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    themeButtonActive: {
-      borderColor: palette.modeActiveBg,
-      backgroundColor: palette.modeActiveBg,
-    },
-    themeText: {
-      color: palette.modeText,
-      fontWeight: '700',
-    },
-    themeTextActive: {
-      color: palette.modeActiveText,
     },
     googleButton: {
       minHeight: 50,

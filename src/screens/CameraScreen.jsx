@@ -197,7 +197,6 @@ export default function CameraScreen({
   apiBaseUrl = '',
   userId = '',
   themeName = 'dark',
-  setThemeName = () => {},
 }) {
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
@@ -549,43 +548,7 @@ export default function CameraScreen({
     <SafeAreaView style={styles.safeArea}>
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
-          <View style={styles.heroTopRow}>
-            <Text style={styles.eyebrow}>EcoLens</Text>
-            <View style={styles.themeToggle}>
-              <Pressable
-                onPress={() => setThemeName('light')}
-                style={[
-                  styles.themeToggleButton,
-                  themeName === 'light' ? styles.themeToggleButtonActive : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.themeToggleText,
-                    themeName === 'light' ? styles.themeToggleTextActive : null,
-                  ]}
-                >
-                  Light
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setThemeName('dark')}
-                style={[
-                  styles.themeToggleButton,
-                  themeName === 'dark' ? styles.themeToggleButtonActive : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.themeToggleText,
-                    themeName === 'dark' ? styles.themeToggleTextActive : null,
-                  ]}
-                >
-                  Dark
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          <Text style={styles.eyebrow}>EcoLens</Text>
 
           <Text style={styles.title}>Scan. Understand. Improve.</Text>
           <Text style={styles.subtitle}>
@@ -948,43 +911,12 @@ function createStyles(palette) {
       elevation: 4,
       gap: 6,
     },
-    heroTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 8,
-    },
     eyebrow: {
       fontSize: 12,
       letterSpacing: 1,
       textTransform: 'uppercase',
       color: '#38BDF8',
       fontWeight: '700',
-    },
-    themeToggle: {
-      flexDirection: 'row',
-      gap: 6,
-      backgroundColor: palette.input,
-      borderWidth: 1,
-      borderColor: palette.border,
-      borderRadius: 999,
-      padding: 3,
-    },
-    themeToggleButton: {
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 999,
-    },
-    themeToggleButtonActive: {
-      backgroundColor: '#0EA5E9',
-    },
-    themeToggleText: {
-      color: palette.textSecondary,
-      fontWeight: '700',
-      fontSize: 12,
-    },
-    themeToggleTextActive: {
-      color: '#082F49',
     },
     title: {
       fontSize: 26,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CameraScreen from './src/screens/CameraScreen.jsx';
@@ -56,8 +56,9 @@ export default function App() {
   });
   const [apiMode, setApiMode] = useState('production');
   const [devBaseUrl, setDevBaseUrl] = useState(DEV_API_BASE_URL);
-  const [themeName, setThemeName] = useState('dark');
   const [authUser, setAuthUser] = useState(null);
+  const colorScheme = useColorScheme();
+  const themeName = colorScheme === 'light' ? 'light' : 'dark';
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const userId = resolveUserId(authUser);
   const palette = THEMES[themeName] ?? THEMES.dark;
@@ -100,7 +101,7 @@ export default function App() {
     <SafeAreaView style={styles.appRoot}>
       <StatusBar style={palette.statusBarStyle} backgroundColor={palette.page} />
       {!authUser ? (
-        <LoginScreen themeName={themeName} setThemeName={setThemeName} onLogin={setAuthUser} />
+        <LoginScreen themeName={themeName} onLogin={setAuthUser} />
       ) : (
         <>
       <View style={styles.screenWrap}>
@@ -124,7 +125,6 @@ export default function App() {
             apiBaseUrl={apiBaseUrl}
             userId={userId}
             themeName={themeName}
-            setThemeName={setThemeName}
           />
         ) : null}
         {activeTab === 'history' ? (
