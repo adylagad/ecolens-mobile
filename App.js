@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,6 +32,7 @@ const DEFAULT_HISTORY_THRESHOLDS = {
   highImpactThreshold: 40,
   greenerThreshold: 85,
 };
+const TOAST_DURATION_MS = 3000;
 
 function resolveUserId(authUser) {
   if (!authUser) {
@@ -59,7 +60,7 @@ export default function App() {
     ...DEFAULT_HISTORY_THRESHOLDS,
   });
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyLoadError, setHistoryLoadError] = useState('');
+  const [toast, setToast] = useState(null);
   const [goalState, setGoalState] = useState({
     weekKey: getWeekKey(),
     avoidedSingleUseCount: 0,
@@ -74,16 +75,39 @@ export default function App() {
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const userId = resolveUserId(authUser);
   const palette = THEMES[themeName] ?? THEMES.dark;
-  const styles = createStyles(palette);
+  const styles = createStyles(palette, themeName);
+  const toastTimerRef = useRef(null);
+
+  const showToast = (message, type = 'info') => {
+    const text = String(message ?? '').trim();
+    if (!text) {
+      return;
+    }
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToast({ message: text, type, id: Date.now() });
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, TOAST_DURATION_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const loadHistory = async () => {
     if (!userId) {
       setHistoryLoading(false);
-      setHistoryLoadError('');
       return;
     }
     setHistoryLoading(true);
-    setHistoryLoadError('');
     try {
       const userQuery = `userId=${encodeURIComponent(userId)}`;
       const historyUrl = `${buildApiUrl(apiBaseUrl, '/api/history')}?${userQuery}`;
@@ -119,7 +143,10 @@ export default function App() {
         // Keep history usable even if stats endpoint is unavailable.
       }
     } catch (error) {
-      setHistoryLoadError('');
+      showToast(
+        error?.message ? `Could not load history: ${error.message}` : 'Could not load history right now.',
+        'error'
+      );
     } finally {
       setHistoryLoading(false);
     }
@@ -132,8 +159,24 @@ export default function App() {
   return (
     <SafeAreaView style={styles.appRoot}>
       <StatusBar style={palette.statusBarStyle} backgroundColor={palette.page} />
+      {toast ? (
+        <View pointerEvents="none" style={styles.toastWrap}>
+          <View
+            style={[
+              styles.toastCard,
+              toast.type === 'error'
+                ? styles.toastError
+                : toast.type === 'success'
+                  ? styles.toastSuccess
+                  : styles.toastInfo,
+            ]}
+          >
+            <Text style={styles.toastText}>{toast.message}</Text>
+          </View>
+        </View>
+      ) : null}
       {!authUser ? (
-        <LoginScreen themeName={themeName} onLogin={setAuthUser} />
+        <LoginScreen themeName={themeName} onLogin={setAuthUser} showToast={showToast} />
       ) : (
         <>
       <View style={styles.screenWrap}>
@@ -158,6 +201,7 @@ export default function App() {
             userId={userId}
             themeName={themeName}
             historyThresholds={historyStats}
+            showToast={showToast}
           />
         ) : null}
         {activeTab === 'history' ? (
@@ -166,7 +210,6 @@ export default function App() {
             stats={historyStats}
             themeName={themeName}
             loading={historyLoading}
-            error={historyLoadError}
             onRetry={loadHistory}
           />
         ) : null}
@@ -195,11 +238,50 @@ export default function App() {
   );
 }
 
-function createStyles(palette) {
+function createStyles(palette, themeName) {
   return StyleSheet.create({
     appRoot: {
       flex: 1,
       backgroundColor: palette.page,
+    },
+    toastWrap: {
+      position: 'absolute',
+      top: 14,
+      left: 12,
+      right: 12,
+      zIndex: 50,
+      alignItems: 'center',
+    },
+    toastCard: {
+      width: '100%',
+      maxWidth: 560,
+      borderRadius: 12,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 3,
+    },
+    toastInfo: {
+      backgroundColor: palette.noticeInfoBg,
+      borderColor: palette.noticeInfoBorder,
+    },
+    toastSuccess: {
+      backgroundColor: themeName === 'light' ? '#DCFCE7' : 'rgba(34, 197, 94, 0.2)',
+      borderColor: themeName === 'light' ? '#86EFAC' : 'rgba(74, 222, 128, 0.35)',
+    },
+    toastError: {
+      backgroundColor: palette.noticeErrorBg,
+      borderColor: palette.noticeErrorBorder,
+    },
+    toastText: {
+      color: palette.textPrimary,
+      fontSize: 13,
+      fontWeight: '700',
+      lineHeight: 18,
     },
     screenWrap: {
       flex: 1,

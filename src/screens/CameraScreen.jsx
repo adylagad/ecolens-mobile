@@ -254,7 +254,6 @@ export default function CameraScreen({
   setScanHistory = () => {},
   setHistoryStats = () => {},
   historyThresholds = null,
-  goalState,
   setGoalState = () => {},
   apiMode = 'production',
   setApiMode = () => {},
@@ -263,6 +262,7 @@ export default function CameraScreen({
   apiBaseUrl = '',
   userId = '',
   themeName = 'dark',
+  showToast = () => {},
 }) {
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
@@ -273,8 +273,6 @@ export default function CameraScreen({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingStageIndex, setLoadingStageIndex] = useState(0);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [queuedRequests, setQueuedRequests] = useState([]);
@@ -359,8 +357,6 @@ export default function CameraScreen({
 
   const handleAnalyze = async (manualOverrideLabel = null) => {
     setLoading(true);
-    setError('');
-    setMessage('');
     setResult(null);
 
     let payload = {
@@ -386,7 +382,7 @@ export default function CameraScreen({
         } catch (captureError) {
           const imageBase64 = await loadDefaultImageBase64();
           payload.imageBase64 = imageBase64;
-          setMessage(
+          showToast(
             `Camera capture unavailable (${captureError.message}). Using bundled test image instead.`
           );
         }
@@ -426,12 +422,13 @@ export default function CameraScreen({
           createdAt: new Date().toISOString(),
         };
         setQueuedRequests((prev) => [queued, ...prev].slice(0, 20));
-        setError('You appear offline. Scan request queued.');
+        showToast('You appear offline. Scan request queued.', 'error');
       } else {
-        setError(
+        showToast(
           fetchError.message
             ? `Could not analyze right now: ${fetchError.message}`
-            : 'Could not analyze right now. Please check app and backend logs.'
+            : 'Could not analyze right now. Please check app and backend logs.',
+          'error'
         );
       }
     } finally {
@@ -444,18 +441,18 @@ export default function CameraScreen({
       return;
     }
     setLoading(true);
-    setError('');
     const [next, ...rest] = queuedRequests;
     try {
       const data = await executeRecognition(next.payload);
       setResult(data);
       setQueuedRequests(rest);
-      setMessage('Queued scan processed successfully.');
+      showToast('Queued scan processed successfully.', 'success');
     } catch (retryError) {
-      setError(
+      showToast(
         retryError.message
           ? `Retry failed: ${retryError.message}`
-          : 'Retry failed. You may still be offline.'
+          : 'Retry failed. You may still be offline.',
+        'error'
       );
     } finally {
       setLoading(false);
@@ -494,18 +491,9 @@ export default function CameraScreen({
   }, [result]);
   const alternativeSuggestions = useMemo(() => getAlternativeSuggestions(result), [result]);
   const greenerLabel = useMemo(() => getGreenerAlternativeLabel(result), [result]);
-  const safeGoalState = goalState ?? {
-    weekKey: getWeekKey(),
-    avoidedSingleUseCount: 0,
-    currentStreak: 0,
-    bestStreak: 0,
-  };
-  const goalProgress = Math.min(safeGoalState.avoidedSingleUseCount / GOAL_TARGET, 1);
 
   const handleScanAgain = () => {
     setResult(null);
-    setMessage('');
-    setError('');
     setTimeout(() => {
       scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     }, 50);
@@ -587,8 +575,7 @@ export default function CameraScreen({
         // Keep UI responsive even if stats refresh fails.
       }
 
-      setMessage('Saved to backend history.');
-      setError('');
+      showToast('Saved to backend history.', 'success');
       return;
     } catch (saveError) {
       const fallbackEntry = {
@@ -616,14 +603,13 @@ export default function CameraScreen({
         });
         return nextHistory;
       });
-      setMessage('Saved locally. Backend history was unavailable.');
-      setError('');
+      showToast('Saved locally. Backend history was unavailable.', 'info');
     }
   };
 
   const handleTryGreenerAlternative = () => {
     if (!greenerLabel) {
-      setMessage('No mapped greener alternative yet for this item.');
+      showToast('No mapped greener alternative yet for this item.', 'info');
       return;
     }
     setSelectedLabel(greenerLabel);
@@ -638,7 +624,7 @@ export default function CameraScreen({
       result.altRecommendation ?? 'No alternative suggestion.'
     }`;
     AccessibilityInfo.announceForAccessibility(summary);
-    setMessage('Voice summary announced for accessibility.');
+    showToast('Voice summary announced for accessibility.', 'info');
   };
 
   return (
@@ -651,28 +637,6 @@ export default function CameraScreen({
           <Text style={styles.subtitle}>
             Detect everyday products and get a practical eco rating with better alternatives.
           </Text>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <View style={styles.goalHeaderRow}>
-            <Text style={styles.sectionTitle}>Weekly Goal</Text>
-            <Text style={styles.goalWeekText}>{safeGoalState.weekKey}</Text>
-          </View>
-          <Text style={styles.sectionHint}>Avoid 5 single-use items this week.</Text>
-          <View style={styles.goalProgressTrack}>
-            <View style={[styles.goalProgressFill, { width: `${goalProgress * 100}%` }]} />
-          </View>
-          <View style={styles.goalStatsRow}>
-            <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
-              Progress: {safeGoalState.avoidedSingleUseCount}/{GOAL_TARGET}
-            </Text>
-            <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
-              Streak: {safeGoalState.currentStreak}
-            </Text>
-            <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
-              Best: {safeGoalState.bestStreak}
-            </Text>
-          </View>
         </View>
 
         <View style={styles.sectionCard}>
@@ -786,20 +750,6 @@ export default function CameraScreen({
             </View>
             <View style={styles.skeletonLineMd} />
             <View style={styles.skeletonLineSm} />
-          </View>
-        ) : null}
-
-        {message ? (
-          <View style={[styles.noticeCard, styles.infoCard]}>
-            <Text style={styles.noticeText}>{message}</Text>
-          </View>
-        ) : null}
-
-        {error ? (
-          <View style={[styles.noticeCard, styles.errorCard]}>
-            <Text style={[styles.noticeText, themeName === 'light' ? styles.noticeTextLightError : null]}>
-              {error}
-            </Text>
           </View>
         ) : null}
 
@@ -1051,39 +1001,6 @@ function createStyles(palette) {
       borderColor: palette.border,
       gap: 10,
     },
-    goalHeaderRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 8,
-    },
-    goalWeekText: {
-      color: palette.textSecondary,
-      fontSize: 11,
-      fontWeight: '700',
-    },
-    goalProgressTrack: {
-      height: 10,
-      borderRadius: 999,
-      overflow: 'hidden',
-      backgroundColor: palette.input,
-      borderWidth: 1,
-      borderColor: palette.border,
-    },
-    goalProgressFill: {
-      height: '100%',
-      backgroundColor: '#16A34A',
-    },
-    goalStatsRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      gap: 8,
-    },
-    goalStatText: {
-      color: palette.textPrimary,
-      fontSize: 12,
-      fontWeight: '700',
-    },
     sectionTitle: {
       color: palette.textPrimary,
       fontSize: 18,
@@ -1254,14 +1171,6 @@ function createStyles(palette) {
       padding: 12,
       borderWidth: 1,
     },
-    infoCard: {
-      backgroundColor: palette.noticeInfoBg,
-      borderColor: palette.noticeInfoBorder,
-    },
-    errorCard: {
-      backgroundColor: palette.noticeErrorBg,
-      borderColor: palette.noticeErrorBorder,
-    },
     queuedCard: {
       backgroundColor: '#FEF9C3',
       borderColor: '#EAB308',
@@ -1295,9 +1204,6 @@ function createStyles(palette) {
       color: palette.textPrimary,
       fontSize: 13,
       lineHeight: 18,
-    },
-    noticeTextLightError: {
-      color: '#7F1D1D',
     },
     resultCard: {
       backgroundColor: palette.card,

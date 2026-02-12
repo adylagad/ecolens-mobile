@@ -12,7 +12,7 @@ const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '';
 
-function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
+function GoogleSignInButton({ styles, palette, onLogin, showToast }) {
   if (Platform.OS === 'ios' && !GOOGLE_IOS_CLIENT_ID) {
     return (
       <Pressable disabled style={[styles.googleButton, styles.googleButtonDisabled]}>
@@ -44,19 +44,18 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
     const loadProfile = async () => {
       if (response?.type !== 'success') {
         if (response?.type === 'error') {
-          setAuthError('Google sign-in failed. Please try again.');
+          showToast('Google sign-in failed. Please try again.', 'error');
         }
         return;
       }
 
       const accessToken = response.authentication?.accessToken;
       if (!accessToken) {
-        setAuthError('Google sign-in did not return an access token.');
+        showToast('Google sign-in did not return an access token.', 'error');
         return;
       }
 
       setLoadingProfile(true);
-      setAuthError('');
       try {
         const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: {
@@ -76,14 +75,17 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
           provider: 'google',
         });
       } catch (error) {
-        setAuthError(error.message ? `Google profile failed: ${error.message}` : 'Google profile failed.');
+        showToast(
+          error.message ? `Google profile failed: ${error.message}` : 'Google profile failed.',
+          'error'
+        );
       } finally {
         setLoadingProfile(false);
       }
     };
 
     loadProfile();
-  }, [onLogin, response]);
+  }, [onLogin, response, showToast]);
 
   return (
     <Pressable
@@ -94,7 +96,6 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
         pressed ? styles.googleButtonPressed : null,
       ]}
       onPress={() => {
-        setAuthError('');
         promptAsync();
       }}
     >
@@ -110,10 +111,9 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
   );
 }
 
-export default function LoginScreen({ themeName = 'dark', onLogin = () => {} }) {
+export default function LoginScreen({ themeName = 'dark', onLogin = () => {}, showToast = () => {} }) {
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
-  const [authError, setAuthError] = useState('');
   const isExpoGo = Constants.appOwnership === 'expo';
 
   const hasGoogleClientIds = Platform.OS === 'ios'
@@ -143,7 +143,7 @@ export default function LoginScreen({ themeName = 'dark', onLogin = () => {} }) 
               styles={styles}
               palette={palette}
               onLogin={onLogin}
-              setAuthError={setAuthError}
+              showToast={showToast}
             />
           ) : (
             <>
@@ -163,8 +163,6 @@ export default function LoginScreen({ themeName = 'dark', onLogin = () => {} }) 
           >
             <Text style={styles.secondaryButtonText}>Continue as Guest</Text>
           </Pressable>
-
-          {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
         </View>
       </View>
     </SafeAreaView>
@@ -253,11 +251,6 @@ function createStyles(palette) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-    },
-    errorText: {
-      color: '#B91C1C',
-      fontSize: 13,
-      lineHeight: 18,
     },
     hint: {
       color: palette.textSecondary,

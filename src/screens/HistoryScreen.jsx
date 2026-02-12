@@ -7,7 +7,6 @@ export default function HistoryScreen({
   stats = null,
   themeName = 'dark',
   loading = false,
-  error = '',
   onRetry = () => {},
 }) {
   const [highImpactOnly, setHighImpactOnly] = useState(false);
@@ -62,7 +61,12 @@ export default function HistoryScreen({
               </Text>
             </Pressable>
           </View>
-          <Text style={styles.hint}>Track scans and monitor progress over time.</Text>
+          <View style={styles.hintRow}>
+            <Text style={styles.hint}>Track scans and monitor progress over time.</Text>
+            <Pressable style={styles.retryButton} onPress={onRetry}>
+              <Text style={styles.retryButtonText}>Refresh</Text>
+            </Pressable>
+          </View>
 
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
@@ -87,13 +91,6 @@ export default function HistoryScreen({
             <View style={styles.loadingWrap}>
               <ActivityIndicator color="#0EA5E9" />
               <Text style={styles.emptyText}>Loading your scan history...</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.loadingWrap}>
-              <Text style={styles.errorText}>{error}</Text>
-              <Pressable style={styles.retryButton} onPress={onRetry}>
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </Pressable>
             </View>
           ) : !visibleHistory.length ? (
             <Text style={styles.emptyText}>No saved scans yet. Go to Scan and tap Save after a result.</Text>
@@ -152,6 +149,12 @@ function createStyles(palette) {
     color: palette.textSecondary,
     fontSize: 13,
   },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   filterPill: {
     borderWidth: 1,
     borderColor: palette.border,
@@ -203,11 +206,6 @@ function createStyles(palette) {
   loadingWrap: {
     gap: 10,
     alignItems: 'flex-start',
-  },
-  errorText: {
-    color: '#B91C1C',
-    fontSize: 13,
-    lineHeight: 18,
   },
   retryButton: {
     minHeight: 38,
