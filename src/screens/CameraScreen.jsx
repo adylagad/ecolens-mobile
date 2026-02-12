@@ -65,6 +65,8 @@ export default function CameraScreen() {
             `Camera capture unavailable (${captureError.message}). Using bundled test image instead.`
           );
         }
+      } else {
+        payload.detectedLabel = selectedLabel;
       }
 
       const response = await fetch(`${apiBaseUrl}/api/recognize`, {
