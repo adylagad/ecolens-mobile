@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES } from '../theme';
 
-export default function HomeScreen({ themeName = 'dark' }) {
+export default function HomeScreen({ themeName = 'dark', onStartScan = () => {}, userName = '' }) {
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
 
@@ -11,10 +11,14 @@ export default function HomeScreen({ themeName = 'dark' }) {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
           <Text style={styles.kicker}>EcoLens</Text>
+          {userName ? <Text style={styles.greeting}>Hi {userName.split(' ')[0]},</Text> : null}
           <Text style={styles.title}>Quick eco decisions while you shop.</Text>
           <Text style={styles.subtitle}>
             Scan an item, get an impact score, and see a better alternative in seconds.
           </Text>
+          <Pressable style={styles.scanCta} onPress={onStartScan}>
+            <Text style={styles.scanCtaText}>Start Scanning</Text>
+          </Pressable>
         </View>
 
         <View style={styles.card}>
@@ -60,10 +64,30 @@ function createStyles(palette) {
       fontWeight: '800',
       lineHeight: 30,
     },
+    greeting: {
+      color: palette.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
     subtitle: {
       color: palette.textSecondary,
       fontSize: 14,
       lineHeight: 20,
+    },
+    scanCta: {
+      marginTop: 6,
+      minHeight: 46,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.action,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scanCtaText: {
+      color: palette.actionText,
+      fontSize: 15,
+      fontWeight: '800',
     },
     card: {
       backgroundColor: palette.card,

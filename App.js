@@ -5,6 +5,7 @@ import CameraScreen from './src/screens/CameraScreen.jsx';
 import GoalsScreen from './src/screens/GoalsScreen.jsx';
 import HomeScreen from './src/screens/HomeScreen.jsx';
 import HistoryScreen from './src/screens/HistoryScreen.jsx';
+import LoginScreen from './src/screens/LoginScreen.jsx';
 import MetaScreen from './src/screens/MetaScreen.jsx';
 import { DEV_API_BASE_URL, PROD_API_BASE_URL } from './src/config';
 import { THEMES } from './src/theme';
@@ -39,6 +40,7 @@ export default function App() {
   const [apiMode, setApiMode] = useState('production');
   const [devBaseUrl, setDevBaseUrl] = useState(DEV_API_BASE_URL);
   const [themeName, setThemeName] = useState('dark');
+  const [authUser, setAuthUser] = useState(null);
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = createStyles(palette);
@@ -75,8 +77,18 @@ export default function App() {
   return (
     <SafeAreaView style={styles.appRoot}>
       <StatusBar style={palette.statusBarStyle} backgroundColor={palette.page} />
+      {!authUser ? (
+        <LoginScreen themeName={themeName} setThemeName={setThemeName} onLogin={setAuthUser} />
+      ) : (
+        <>
       <View style={styles.screenWrap}>
-        {activeTab === 'home' ? <HomeScreen themeName={themeName} /> : null}
+        {activeTab === 'home' ? (
+          <HomeScreen
+            themeName={themeName}
+            onStartScan={() => setActiveTab('scan')}
+            userName={authUser?.name ?? ''}
+          />
+        ) : null}
         {activeTab === 'scan' ? (
           <CameraScreen
             setScanHistory={setScanHistory}
@@ -114,6 +126,8 @@ export default function App() {
         ))}
         </View>
       </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
