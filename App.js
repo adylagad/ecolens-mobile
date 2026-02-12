@@ -104,7 +104,6 @@ export default function App() {
             <Text style={[styles.tabText, activeTab === tab.key ? styles.tabTextActive : null]}>
               {tab.label}
             </Text>
-            {activeTab === tab.key ? <View style={styles.tabActiveDot} /> : null}
           </Pressable>
         ))}
         </View>
@@ -128,7 +127,7 @@ function createStyles(palette) {
       position: 'absolute',
       left: 14,
       right: 14,
-      bottom: 8,
+      bottom: 22,
       alignItems: 'center',
     },
     tabBar: {
@@ -173,12 +172,6 @@ function createStyles(palette) {
     },
     tabTextActive: {
       color: palette.tabTextActive,
-    },
-    tabActiveDot: {
-      width: 4,
-      height: 4,
-      borderRadius: 999,
-      backgroundColor: palette.tabTextActive,
     },
   });
 }
