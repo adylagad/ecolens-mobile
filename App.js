@@ -48,6 +48,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [scanHistory, setScanHistory] = useState([]);
   const [historyStats, setHistoryStats] = useState({ avgScore: null, highImpactCount: 0, greenerCount: 0 });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoadError, setHistoryLoadError] = useState('');
   const [goalState, setGoalState] = useState({
     weekKey: getWeekKey(),
     avoidedSingleUseCount: 0,
@@ -64,36 +66,48 @@ export default function App() {
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = createStyles(palette);
 
-  useEffect(() => {
+  const loadHistory = async () => {
     if (!userId) {
+      setHistoryLoading(false);
+      setHistoryLoadError('');
       return;
     }
-    const loadHistory = async () => {
-      try {
-        const userQuery = `userId=${encodeURIComponent(userId)}`;
-        const [historyResponse, statsResponse] = await Promise.all([
-          fetch(`${apiBaseUrl}/api/history?${userQuery}`),
-          fetch(`${apiBaseUrl}/api/history/stats?${userQuery}`),
-        ]);
+    setHistoryLoading(true);
+    setHistoryLoadError('');
+    try {
+      const userQuery = `userId=${encodeURIComponent(userId)}`;
+      const [historyResponse, statsResponse] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/history?${userQuery}`),
+        fetch(`${apiBaseUrl}/api/history/stats?${userQuery}`),
+      ]);
 
-        if (historyResponse.ok) {
-          const historyData = await historyResponse.json();
-          setScanHistory(Array.isArray(historyData) ? historyData : []);
-        }
-
-        if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
-          setHistoryStats({
-            avgScore: statsData?.avgScore ?? null,
-            highImpactCount: statsData?.highImpactCount ?? 0,
-            greenerCount: statsData?.greenerCount ?? 0,
-          });
-        }
-      } catch (error) {
-        // Keep local state as fallback when backend is unreachable.
+      if (historyResponse.ok) {
+        const historyData = await historyResponse.json();
+        setScanHistory(Array.isArray(historyData) ? historyData : []);
+      } else {
+        throw new Error(`History request failed (${historyResponse.status})`);
       }
-    };
 
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setHistoryStats({
+          avgScore: statsData?.avgScore ?? null,
+          highImpactCount: statsData?.highImpactCount ?? 0,
+          greenerCount: statsData?.greenerCount ?? 0,
+        });
+      } else {
+        throw new Error(`Stats request failed (${statsResponse.status})`);
+      }
+    } catch (error) {
+      setHistoryLoadError(
+        error?.message ? `Could not load history: ${error.message}` : 'Could not load history right now.'
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadHistory();
   }, [apiBaseUrl, userId]);
 
@@ -128,7 +142,14 @@ export default function App() {
           />
         ) : null}
         {activeTab === 'history' ? (
-          <HistoryScreen scanHistory={scanHistory} stats={historyStats} themeName={themeName} />
+          <HistoryScreen
+            scanHistory={scanHistory}
+            stats={historyStats}
+            themeName={themeName}
+            loading={historyLoading}
+            error={historyLoadError}
+            onRetry={loadHistory}
+          />
         ) : null}
         {activeTab === 'goals' ? <GoalsScreen goalState={goalState} themeName={themeName} /> : null}
         {activeTab === 'meta' ? <MetaScreen themeName={themeName} /> : null}

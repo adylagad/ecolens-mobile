@@ -1,8 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { THEMES } from '../theme';
 
-export default function HistoryScreen({ scanHistory = [], stats = null, themeName = 'dark' }) {
+export default function HistoryScreen({
+  scanHistory = [],
+  stats = null,
+  themeName = 'dark',
+  loading = false,
+  error = '',
+  onRetry = () => {},
+}) {
   const [highImpactOnly, setHighImpactOnly] = useState(false);
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -66,7 +73,19 @@ export default function HistoryScreen({ scanHistory = [], stats = null, themeNam
         </View>
 
         <View style={styles.card}>
-          {!visibleHistory.length ? (
+          {loading ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator color="#0EA5E9" />
+              <Text style={styles.emptyText}>Loading your scan history...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.loadingWrap}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable style={styles.retryButton} onPress={onRetry}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : !visibleHistory.length ? (
             <Text style={styles.emptyText}>No saved scans yet. Go to Scan and tap Save after a result.</Text>
           ) : (
             <View style={styles.list}>
@@ -170,6 +189,29 @@ function createStyles(palette) {
   emptyText: {
     color: palette.textSecondary,
     fontSize: 13,
+  },
+  loadingWrap: {
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  retryButton: {
+    minHeight: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.input,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  retryButtonText: {
+    color: palette.textPrimary,
+    fontWeight: '700',
+    fontSize: 12,
   },
   list: {
     gap: 8,
