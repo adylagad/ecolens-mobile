@@ -201,6 +201,7 @@ function getGreenerAlternativeLabel(result) {
 export default function CameraScreen() {
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
+  const resultCardYRef = useRef(0);
   const resultAnim = useRef(new Animated.Value(0)).current;
 
   const [themeName, setThemeName] = useState('dark');
@@ -239,7 +240,8 @@ export default function CameraScreen() {
     }).start();
 
     const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
+      const targetY = Math.max(resultCardYRef.current - 10, 0);
+      scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
     }, 180);
 
     return () => clearTimeout(timer);
@@ -544,6 +546,9 @@ export default function CameraScreen() {
                 ],
               },
             ]}
+            onLayout={(event) => {
+              resultCardYRef.current = event.nativeEvent.layout.y;
+            }}
           >
             <View style={styles.resultHeader}>
               <Text style={styles.resultTitle}>{result.title || result.name || 'Result'}</Text>
@@ -918,13 +923,15 @@ function createStyles(palette) {
       minHeight: 56,
       backgroundColor: palette.action,
       borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
       alignItems: 'center',
       justifyContent: 'center',
       shadowColor: palette.action,
-      shadowOpacity: 0.35,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 6,
+      shadowOpacity: 0.14,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
     },
     analyzeButtonPressed: {
       opacity: 0.92,
