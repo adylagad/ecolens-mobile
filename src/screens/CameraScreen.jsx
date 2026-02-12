@@ -226,7 +226,12 @@ function getGreenerAlternativeLabel(result) {
   return null;
 }
 
-export default function CameraScreen() {
+export default function CameraScreen({
+  scanHistory = [],
+  setScanHistory = () => {},
+  goalState,
+  setGoalState = () => {},
+}) {
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
   const resultCardYRef = useRef(0);
@@ -243,15 +248,7 @@ export default function CameraScreen() {
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
-  const [scanHistory, setScanHistory] = useState([]);
-  const [highImpactOnly, setHighImpactOnly] = useState(false);
   const [queuedRequests, setQueuedRequests] = useState([]);
-  const [goalState, setGoalState] = useState({
-    weekKey: getWeekKey(),
-    avoidedSingleUseCount: 0,
-    currentStreak: 0,
-    bestStreak: 0,
-  });
 
   const palette = THEMES[themeName];
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -448,22 +445,13 @@ export default function CameraScreen() {
   const scoreBreakdown = useMemo(() => buildScoreBreakdown(result), [result]);
   const alternativeSuggestions = useMemo(() => getAlternativeSuggestions(result), [result]);
   const greenerLabel = useMemo(() => getGreenerAlternativeLabel(result), [result]);
-  const visibleHistory = useMemo(
-    () => (highImpactOnly ? scanHistory.filter((entry) => entry.ecoScore < 40) : scanHistory),
-    [highImpactOnly, scanHistory]
-  );
-  const improvementStats = useMemo(() => {
-    if (!scanHistory.length) {
-      return { avgScore: null, highImpactCount: 0, greenerCount: 0 };
-    }
-    const avgScore =
-      scanHistory.reduce((sum, entry) => sum + (typeof entry.ecoScore === 'number' ? entry.ecoScore : 0), 0) /
-      scanHistory.length;
-    const highImpactCount = scanHistory.filter((entry) => entry.ecoScore < 40).length;
-    const greenerCount = scanHistory.filter((entry) => entry.ecoScore >= 85).length;
-    return { avgScore, highImpactCount, greenerCount };
-  }, [scanHistory]);
-  const goalProgress = Math.min(goalState.avoidedSingleUseCount / GOAL_TARGET, 1);
+  const safeGoalState = goalState ?? {
+    weekKey: getWeekKey(),
+    avoidedSingleUseCount: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+  };
+  const goalProgress = Math.min(safeGoalState.avoidedSingleUseCount / GOAL_TARGET, 1);
 
   const handleScanAgain = () => {
     setResult(null);
@@ -561,7 +549,7 @@ export default function CameraScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.goalHeaderRow}>
             <Text style={styles.sectionTitle}>Weekly Goal</Text>
-            <Text style={styles.goalWeekText}>{goalState.weekKey}</Text>
+            <Text style={styles.goalWeekText}>{safeGoalState.weekKey}</Text>
           </View>
           <Text style={styles.sectionHint}>Avoid 5 single-use items this week.</Text>
           <View style={styles.goalProgressTrack}>
@@ -569,13 +557,13 @@ export default function CameraScreen() {
           </View>
           <View style={styles.goalStatsRow}>
             <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
-              Progress: {goalState.avoidedSingleUseCount}/{GOAL_TARGET}
+              Progress: {safeGoalState.avoidedSingleUseCount}/{GOAL_TARGET}
             </Text>
             <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
-              Streak: {goalState.currentStreak}
+              Streak: {safeGoalState.currentStreak}
             </Text>
             <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
-              Best: {goalState.bestStreak}
+              Best: {safeGoalState.bestStreak}
             </Text>
           </View>
         </View>
@@ -844,55 +832,6 @@ export default function CameraScreen() {
           </Animated.View>
         ) : null}
 
-        <View style={styles.sectionCard}>
-          <View style={styles.historyHeaderRow}>
-            <Text style={styles.sectionTitle}>History Timeline</Text>
-            <Pressable
-              style={[styles.filterPill, highImpactOnly ? styles.filterPillActive : null]}
-              onPress={() => setHighImpactOnly((prev) => !prev)}
-            >
-              <Text style={[styles.filterPillText, highImpactOnly ? styles.filterPillTextActive : null]}>
-                {highImpactOnly ? 'High impact only: ON' : 'High impact only: OFF'}
-              </Text>
-            </Pressable>
-          </View>
-          <Text style={styles.sectionHint}>Track scans and monitor progress over time.</Text>
-
-          <View style={styles.historyStatsRow}>
-            <View style={styles.historyStatCard}>
-              <Text style={styles.historyStatLabel}>Avg score</Text>
-              <Text style={styles.historyStatValue}>
-                {improvementStats.avgScore === null ? '-' : improvementStats.avgScore.toFixed(1)}
-              </Text>
-            </View>
-            <View style={styles.historyStatCard}>
-              <Text style={styles.historyStatLabel}>High impact</Text>
-              <Text style={styles.historyStatValue}>{improvementStats.highImpactCount}</Text>
-            </View>
-            <View style={styles.historyStatCard}>
-              <Text style={styles.historyStatLabel}>Greener picks</Text>
-              <Text style={styles.historyStatValue}>{improvementStats.greenerCount}</Text>
-            </View>
-          </View>
-
-          {!visibleHistory.length ? (
-            <Text style={styles.historyEmpty}>No saved scans yet. Analyze and tap Save.</Text>
-          ) : (
-            <View style={styles.historyList}>
-              {visibleHistory.map((entry) => (
-                <View key={entry.id} style={styles.historyItem}>
-                  <View style={styles.historyItemTop}>
-                    <Text style={styles.historyItemTitle}>{entry.item}</Text>
-                    <Text style={styles.historyItemScore}>Score {entry.ecoScore}</Text>
-                  </View>
-                  <Text style={styles.historyItemMeta}>
-                    {entry.category} • {new Date(entry.timestamp).toLocaleString()}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
       </ScrollView>
 
       <Modal
@@ -1454,89 +1393,6 @@ function createStyles(palette) {
     },
     breakdownDeltaNeutral: {
       color: palette.textSecondary,
-    },
-    historyHeaderRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 10,
-    },
-    filterPill: {
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.input,
-      borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-    },
-    filterPillActive: {
-      borderColor: '#EF4444',
-      backgroundColor: '#FEE2E2',
-    },
-    filterPillText: {
-      color: palette.textSecondary,
-      fontSize: 11,
-      fontWeight: '700',
-    },
-    filterPillTextActive: {
-      color: '#7F1D1D',
-    },
-    historyStatsRow: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    historyStatCard: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.cardAlt,
-      borderRadius: 10,
-      padding: 10,
-      gap: 2,
-    },
-    historyStatLabel: {
-      color: palette.textSecondary,
-      fontSize: 11,
-    },
-    historyStatValue: {
-      color: palette.textPrimary,
-      fontSize: 16,
-      fontWeight: '800',
-    },
-    historyEmpty: {
-      color: palette.textSecondary,
-      fontSize: 13,
-    },
-    historyList: {
-      gap: 8,
-    },
-    historyItem: {
-      borderWidth: 1,
-      borderColor: palette.border,
-      backgroundColor: palette.cardAlt,
-      borderRadius: 10,
-      padding: 10,
-      gap: 4,
-    },
-    historyItemTop: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 8,
-    },
-    historyItemTitle: {
-      color: palette.textPrimary,
-      fontWeight: '700',
-      flex: 1,
-    },
-    historyItemScore: {
-      color: palette.textPrimary,
-      fontWeight: '800',
-      fontSize: 12,
-    },
-    historyItemMeta: {
-      color: palette.textSecondary,
-      fontSize: 12,
     },
     modalBackdrop: {
       flex: 1,
