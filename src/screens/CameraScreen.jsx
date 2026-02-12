@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -37,17 +36,14 @@ export default function CameraScreen() {
 
   const loadDefaultImageBase64 = async () => {
     const testAsset = Asset.fromModule(require('../../assets/test-image.png'));
-    if (!testAsset.localUri) {
-      await testAsset.downloadAsync();
-    }
+    await testAsset.downloadAsync();
 
     const assetUri = testAsset.localUri || testAsset.uri;
-    const normalizedUri =
-      Platform.OS === 'ios' && assetUri.startsWith('file://')
-        ? assetUri.replace('file://', '')
-        : assetUri;
+    if (!assetUri) {
+      throw new Error('Default test image URI is unavailable.');
+    }
 
-    const imageBase64 = await FileSystem.readAsStringAsync(normalizedUri, {
+    const imageBase64 = await FileSystem.readAsStringAsync(assetUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
 
