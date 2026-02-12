@@ -9,10 +9,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Asset } from 'expo-asset';
-import * as FileSystem from 'expo-file-system';
 import CameraProvider from '../clients/CameraProvider';
 import { DEV_API_BASE_URL, PROD_API_BASE_URL } from '../config';
+import { TEST_IMAGE_BASE64 } from '../config/testImageBase64';
 
 const LABEL_OPTIONS = [
   { label: 'Auto-detect from camera', value: '' },
@@ -34,25 +33,7 @@ export default function CameraScreen() {
   const [result, setResult] = useState(null);
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
 
-  const loadDefaultImageBase64 = async () => {
-    const testAsset = Asset.fromModule(require('../../assets/test-image.png'));
-    await testAsset.downloadAsync();
-
-    const assetUri = testAsset.localUri || testAsset.uri;
-    if (!assetUri) {
-      throw new Error('Default test image URI is unavailable.');
-    }
-
-    const imageBase64 = await FileSystem.readAsStringAsync(assetUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    if (!imageBase64) {
-      throw new Error('Default test image could not be loaded.');
-    }
-
-    return imageBase64;
-  };
+  const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
   const handleAnalyze = async () => {
     setLoading(true);
