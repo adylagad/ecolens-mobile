@@ -48,7 +48,7 @@ const THEMES = {
     page: '#F1F5F9',
     card: '#FFFFFF',
     cardAlt: '#F8FAFC',
-    border: '#94A3B8',
+    border: '#CBD5E1',
     textPrimary: '#0F172A',
     textSecondary: '#1E293B',
     action: '#16A34A',

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import CameraScreen from './src/screens/CameraScreen.jsx';
 import GoalsScreen from './src/screens/GoalsScreen.jsx';
 import HistoryScreen from './src/screens/HistoryScreen.jsx';
@@ -30,7 +30,7 @@ export default function App() {
   });
 
   return (
-    <View style={styles.appRoot}>
+    <SafeAreaView style={styles.appRoot}>
       <View style={styles.screenWrap}>
         {activeTab === 'scan' ? (
           <CameraScreen
@@ -57,7 +57,7 @@ export default function App() {
           </Pressable>
         ))}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -74,10 +74,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 18,
     borderTopWidth: 1,
     borderTopColor: '#25324A',
     backgroundColor: '#0B1221',
+    minHeight: 74,
   },
   tabButton: {
     flex: 1,
