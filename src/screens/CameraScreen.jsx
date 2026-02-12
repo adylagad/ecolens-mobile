@@ -232,6 +232,7 @@ function getGreenerAlternativeLabel(result) {
 export default function CameraScreen({
   setScanHistory = () => {},
   setHistoryStats = () => {},
+  historyThresholds = null,
   goalState,
   setGoalState = () => {},
   apiMode = 'production',
@@ -264,6 +265,16 @@ export default function CameraScreen({
   const manualLabelOptions = LABEL_OPTIONS.filter(
     (option) => option.value && option.value !== '__test_image__'
   );
+  const highImpactThreshold =
+    typeof historyThresholds?.highImpactThreshold === 'number' &&
+    Number.isFinite(historyThresholds.highImpactThreshold)
+      ? historyThresholds.highImpactThreshold
+      : 40;
+  const greenerThreshold =
+    typeof historyThresholds?.greenerThreshold === 'number' &&
+    Number.isFinite(historyThresholds.greenerThreshold)
+      ? historyThresholds.greenerThreshold
+      : 85;
 
   useEffect(() => {
     if (!result) {
@@ -532,11 +543,19 @@ export default function CameraScreen({
         const statsResponse = await fetch(`${apiBaseUrl}/api/history/stats?${userQuery}`);
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
-          setHistoryStats({
+          setHistoryStats((prev) => ({
             avgScore: statsData?.avgScore ?? null,
             highImpactCount: statsData?.highImpactCount ?? 0,
             greenerCount: statsData?.greenerCount ?? 0,
-          });
+            highImpactThreshold:
+              typeof statsData?.highImpactThreshold === 'number'
+                ? statsData.highImpactThreshold
+                : prev?.highImpactThreshold ?? highImpactThreshold,
+            greenerThreshold:
+              typeof statsData?.greenerThreshold === 'number'
+                ? statsData.greenerThreshold
+                : prev?.greenerThreshold ?? greenerThreshold,
+          }));
         }
       } catch (statsError) {
         // Keep UI responsive even if stats refresh fails.
@@ -560,12 +579,14 @@ export default function CameraScreen({
         const avgScore = total
           ? nextHistory.reduce((sum, entry) => sum + (Number(entry.ecoScore) || 0), 0) / total
           : null;
-        const highImpactCount = nextHistory.filter((entry) => Number(entry.ecoScore) < 40).length;
-        const greenerCount = nextHistory.filter((entry) => Number(entry.ecoScore) >= 85).length;
+        const highImpactCount = nextHistory.filter((entry) => Number(entry.ecoScore) < highImpactThreshold).length;
+        const greenerCount = nextHistory.filter((entry) => Number(entry.ecoScore) >= greenerThreshold).length;
         setHistoryStats({
           avgScore,
           highImpactCount,
           greenerCount,
+          highImpactThreshold,
+          greenerThreshold,
         });
         return nextHistory;
       });

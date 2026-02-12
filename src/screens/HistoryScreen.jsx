@@ -13,10 +13,18 @@ export default function HistoryScreen({
   const [highImpactOnly, setHighImpactOnly] = useState(false);
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const highImpactThreshold =
+    typeof stats?.highImpactThreshold === 'number' && Number.isFinite(stats.highImpactThreshold)
+      ? stats.highImpactThreshold
+      : 40;
+  const greenerThreshold =
+    typeof stats?.greenerThreshold === 'number' && Number.isFinite(stats.greenerThreshold)
+      ? stats.greenerThreshold
+      : 85;
 
   const visibleHistory = useMemo(
-    () => (highImpactOnly ? scanHistory.filter((entry) => entry.ecoScore < 40) : scanHistory),
-    [highImpactOnly, scanHistory]
+    () => (highImpactOnly ? scanHistory.filter((entry) => entry.ecoScore < highImpactThreshold) : scanHistory),
+    [highImpactOnly, highImpactThreshold, scanHistory]
   );
 
   const localStats = useMemo(() => {
@@ -26,10 +34,10 @@ export default function HistoryScreen({
     const avgScore =
       scanHistory.reduce((sum, entry) => sum + (typeof entry.ecoScore === 'number' ? entry.ecoScore : 0), 0) /
       scanHistory.length;
-    const highImpactCount = scanHistory.filter((entry) => entry.ecoScore < 40).length;
-    const greenerCount = scanHistory.filter((entry) => entry.ecoScore >= 85).length;
+    const highImpactCount = scanHistory.filter((entry) => entry.ecoScore < highImpactThreshold).length;
+    const greenerCount = scanHistory.filter((entry) => entry.ecoScore >= greenerThreshold).length;
     return { avgScore, highImpactCount, greenerCount };
-  }, [scanHistory]);
+  }, [greenerThreshold, highImpactThreshold, scanHistory]);
 
   const resolvedStats = {
     avgScore: stats?.avgScore ?? localStats.avgScore,
@@ -48,7 +56,9 @@ export default function HistoryScreen({
               onPress={() => setHighImpactOnly((prev) => !prev)}
             >
               <Text style={[styles.filterPillText, highImpactOnly ? styles.filterPillTextActive : null]}>
-                {highImpactOnly ? 'High impact only: ON' : 'High impact only: OFF'}
+                {highImpactOnly
+                  ? `High impact (<${highImpactThreshold}): ON`
+                  : `High impact (<${highImpactThreshold}): OFF`}
               </Text>
             </Pressable>
           </View>

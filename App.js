@@ -27,6 +27,10 @@ const TABS = [
   { key: 'goals', label: 'Goals' },
   { key: 'meta', label: 'Meta' },
 ];
+const DEFAULT_HISTORY_THRESHOLDS = {
+  highImpactThreshold: 40,
+  greenerThreshold: 85,
+};
 
 function resolveUserId(authUser) {
   if (!authUser) {
@@ -47,7 +51,12 @@ function resolveUserId(authUser) {
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [scanHistory, setScanHistory] = useState([]);
-  const [historyStats, setHistoryStats] = useState({ avgScore: null, highImpactCount: 0, greenerCount: 0 });
+  const [historyStats, setHistoryStats] = useState({
+    avgScore: null,
+    highImpactCount: 0,
+    greenerCount: 0,
+    ...DEFAULT_HISTORY_THRESHOLDS,
+  });
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyLoadError, setHistoryLoadError] = useState('');
   const [goalState, setGoalState] = useState({
@@ -94,6 +103,14 @@ export default function App() {
           avgScore: statsData?.avgScore ?? null,
           highImpactCount: statsData?.highImpactCount ?? 0,
           greenerCount: statsData?.greenerCount ?? 0,
+          highImpactThreshold:
+            typeof statsData?.highImpactThreshold === 'number'
+              ? statsData.highImpactThreshold
+              : DEFAULT_HISTORY_THRESHOLDS.highImpactThreshold,
+          greenerThreshold:
+            typeof statsData?.greenerThreshold === 'number'
+              ? statsData.greenerThreshold
+              : DEFAULT_HISTORY_THRESHOLDS.greenerThreshold,
         });
       } else {
         throw new Error(`Stats request failed (${statsResponse.status})`);
@@ -139,6 +156,7 @@ export default function App() {
             apiBaseUrl={apiBaseUrl}
             userId={userId}
             themeName={themeName}
+            historyThresholds={historyStats}
           />
         ) : null}
         {activeTab === 'history' ? (
