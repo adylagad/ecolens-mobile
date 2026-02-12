@@ -146,6 +146,58 @@ function buildScoreBreakdown(result) {
   return rows;
 }
 
+function getAlternativeSuggestions(result) {
+  if (!result) {
+    return [];
+  }
+  const category = String(result.category ?? '').toLowerCase();
+  const name = String(result.name ?? '').toLowerCase();
+  const combined = `${category} ${name}`;
+
+  if (combined.includes('plastic bottle')) {
+    return ['Reusable Bottle', 'Glass Bottle', 'Insulated Reusable Bottle'];
+  }
+  if (combined.includes('paper cup') || combined.includes('coffee cup')) {
+    return ['Refillable Coffee Cup', 'Stainless Steel Tumbler', 'Bring-your-own mug'];
+  }
+  if (combined.includes('bag')) {
+    return ['Cloth Bag', 'Jute Shopping Bag', 'Reuse old tote'];
+  }
+  if (combined.includes('utensil') || combined.includes('cutlery') || combined.includes('straw')) {
+    return ['Reusable Cutlery Set', 'Reusable Metal Straw', 'Carry travel utensils'];
+  }
+  if (combined.includes('food packaging') || combined.includes('container')) {
+    return ['Glass Lunch Container', 'Reusable steel lunchbox', 'Choose dine-in packaging'];
+  }
+
+  const fallback = String(result.altRecommendation ?? '').trim();
+  return fallback ? [fallback] : ['Choose reusable and refillable alternatives'];
+}
+
+function getGreenerAlternativeLabel(result) {
+  if (!result) {
+    return null;
+  }
+  const category = String(result.category ?? '').toLowerCase();
+  const name = String(result.name ?? '').toLowerCase();
+  const combined = `${category} ${name}`;
+
+  if (combined.includes('plastic bottle')) {
+    return 'Reusable Bottle';
+  }
+  if (combined.includes('paper cup') || combined.includes('coffee cup')) {
+    return 'Refillable Coffee Cup';
+  }
+  if (combined.includes('plastic bag')) {
+    return 'Cloth Bag';
+  }
+  if (combined.includes('disposable') || combined.includes('single-use') || combined.includes('single use')) {
+    return 'Reusable Cutlery Set';
+  }
+
+  return null;
+}
+
 export default function CameraScreen() {
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
@@ -161,6 +213,8 @@ export default function CameraScreen() {
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const [scanHistory, setScanHistory] = useState([]);
+  const [highImpactOnly, setHighImpactOnly] = useState(false);
 
   const palette = THEMES[themeName];
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -278,6 +332,57 @@ export default function CameraScreen() {
     return ranked.slice(0, 3);
   }, [manualLabelOptions, result, showLowConfidenceHelp]);
   const scoreBreakdown = useMemo(() => buildScoreBreakdown(result), [result]);
+  const alternativeSuggestions = useMemo(() => getAlternativeSuggestions(result), [result]);
+  const greenerLabel = useMemo(() => getGreenerAlternativeLabel(result), [result]);
+  const visibleHistory = useMemo(
+    () => (highImpactOnly ? scanHistory.filter((entry) => entry.ecoScore < 40) : scanHistory),
+    [highImpactOnly, scanHistory]
+  );
+  const improvementStats = useMemo(() => {
+    if (!scanHistory.length) {
+      return { avgScore: null, highImpactCount: 0, greenerCount: 0 };
+    }
+    const avgScore =
+      scanHistory.reduce((sum, entry) => sum + (typeof entry.ecoScore === 'number' ? entry.ecoScore : 0), 0) /
+      scanHistory.length;
+    const highImpactCount = scanHistory.filter((entry) => entry.ecoScore < 40).length;
+    const greenerCount = scanHistory.filter((entry) => entry.ecoScore >= 85).length;
+    return { avgScore, highImpactCount, greenerCount };
+  }, [scanHistory]);
+
+  const handleScanAgain = () => {
+    setResult(null);
+    setMessage('');
+    setError('');
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }, 50);
+  };
+
+  const handleSaveResult = () => {
+    if (!result) {
+      return;
+    }
+    const entry = {
+      id: `${Date.now()}`,
+      item: String(result.name ?? 'Unknown item'),
+      category: String(result.category ?? '-'),
+      ecoScore: typeof result.ecoScore === 'number' ? result.ecoScore : Number(result.ecoScore ?? 0),
+      confidence: typeof result.confidence === 'number' ? result.confidence : Number(result.confidence ?? 0),
+      timestamp: new Date().toISOString(),
+    };
+    setScanHistory((prev) => [entry, ...prev].slice(0, 40));
+    setMessage('Saved to local scan history.');
+  };
+
+  const handleTryGreenerAlternative = () => {
+    if (!greenerLabel) {
+      setMessage('No mapped greener alternative yet for this item.');
+      return;
+    }
+    setSelectedLabel(greenerLabel);
+    handleAnalyze(greenerLabel);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -497,6 +602,29 @@ export default function CameraScreen() {
               </View>
             ) : null}
 
+            <View style={styles.quickActionRow}>
+              <Pressable style={styles.secondaryActionButton} onPress={handleTryGreenerAlternative}>
+                <Text style={styles.secondaryActionText}>Try greener alternative</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryActionButton} onPress={handleScanAgain}>
+                <Text style={styles.secondaryActionText}>Scan again</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryActionButton} onPress={handleSaveResult}>
+                <Text style={styles.secondaryActionText}>Save</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.breakdownCard}>
+              <Text style={styles.breakdownTitle}>What should I buy instead?</Text>
+              <View style={styles.confirmChipRow}>
+                {alternativeSuggestions.map((suggestion) => (
+                  <View key={suggestion} style={styles.suggestionChip}>
+                    <Text style={styles.suggestionChipText}>{suggestion}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.breakdownCard}>
               <Pressable
                 style={styles.breakdownHeader}
@@ -529,6 +657,56 @@ export default function CameraScreen() {
             </View>
           </Animated.View>
         ) : null}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.historyHeaderRow}>
+            <Text style={styles.sectionTitle}>History Timeline</Text>
+            <Pressable
+              style={[styles.filterPill, highImpactOnly ? styles.filterPillActive : null]}
+              onPress={() => setHighImpactOnly((prev) => !prev)}
+            >
+              <Text style={[styles.filterPillText, highImpactOnly ? styles.filterPillTextActive : null]}>
+                {highImpactOnly ? 'High impact only: ON' : 'High impact only: OFF'}
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={styles.sectionHint}>Track scans and monitor progress over time.</Text>
+
+          <View style={styles.historyStatsRow}>
+            <View style={styles.historyStatCard}>
+              <Text style={styles.historyStatLabel}>Avg score</Text>
+              <Text style={styles.historyStatValue}>
+                {improvementStats.avgScore === null ? '-' : improvementStats.avgScore.toFixed(1)}
+              </Text>
+            </View>
+            <View style={styles.historyStatCard}>
+              <Text style={styles.historyStatLabel}>High impact</Text>
+              <Text style={styles.historyStatValue}>{improvementStats.highImpactCount}</Text>
+            </View>
+            <View style={styles.historyStatCard}>
+              <Text style={styles.historyStatLabel}>Greener picks</Text>
+              <Text style={styles.historyStatValue}>{improvementStats.greenerCount}</Text>
+            </View>
+          </View>
+
+          {!visibleHistory.length ? (
+            <Text style={styles.historyEmpty}>No saved scans yet. Analyze and tap Save.</Text>
+          ) : (
+            <View style={styles.historyList}>
+              {visibleHistory.map((entry) => (
+                <View key={entry.id} style={styles.historyItem}>
+                  <View style={styles.historyItemTop}>
+                    <Text style={styles.historyItemTitle}>{entry.item}</Text>
+                    <Text style={styles.historyItemScore}>Score {entry.ecoScore}</Text>
+                  </View>
+                  <Text style={styles.historyItemMeta}>
+                    {entry.category} • {new Date(entry.timestamp).toLocaleString()}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <Modal
@@ -880,6 +1058,37 @@ function createStyles(palette) {
       fontSize: 12,
       fontWeight: '700',
     },
+    quickActionRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    secondaryActionButton: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    secondaryActionText: {
+      color: palette.textPrimary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    suggestionChip: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    suggestionChipText: {
+      color: palette.textPrimary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
     breakdownCard: {
       backgroundColor: palette.cardAlt,
       borderWidth: 1,
@@ -935,6 +1144,89 @@ function createStyles(palette) {
     },
     breakdownDeltaNeutral: {
       color: palette.textSecondary,
+    },
+    historyHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    filterPill: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    filterPillActive: {
+      borderColor: '#EF4444',
+      backgroundColor: '#FEE2E2',
+    },
+    filterPillText: {
+      color: palette.textSecondary,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    filterPillTextActive: {
+      color: '#7F1D1D',
+    },
+    historyStatsRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    historyStatCard: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.cardAlt,
+      borderRadius: 10,
+      padding: 10,
+      gap: 2,
+    },
+    historyStatLabel: {
+      color: palette.textSecondary,
+      fontSize: 11,
+    },
+    historyStatValue: {
+      color: palette.textPrimary,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    historyEmpty: {
+      color: palette.textSecondary,
+      fontSize: 13,
+    },
+    historyList: {
+      gap: 8,
+    },
+    historyItem: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.cardAlt,
+      borderRadius: 10,
+      padding: 10,
+      gap: 4,
+    },
+    historyItemTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    historyItemTitle: {
+      color: palette.textPrimary,
+      fontWeight: '700',
+      flex: 1,
+    },
+    historyItemScore: {
+      color: palette.textPrimary,
+      fontWeight: '800',
+      fontSize: 12,
+    },
+    historyItemMeta: {
+      color: palette.textSecondary,
+      fontSize: 12,
     },
     modalBackdrop: {
       flex: 1,
