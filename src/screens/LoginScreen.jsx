@@ -15,17 +15,13 @@ const EXPO_PROXY_PROJECT = '@adylagad/ecolens-mobile';
 
 function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
   const isExpoGo = Constants.appOwnership === 'expo';
-  const googleConfig = isExpoGo
-    ? {
-        expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-        scopes: ['openid', 'profile', 'email'],
-      }
-    : {
-        webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-        iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-        androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
-        scopes: ['openid', 'profile', 'email'],
-      };
+  const googleConfig = {
+    webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+    expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
+    scopes: ['openid', 'profile', 'email'],
+  };
 
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [request, response, promptAsync] = Google.useAuthRequest(googleConfig);
@@ -110,20 +106,16 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
   const [authError, setAuthError] = useState('');
   const isExpoGo = Constants.appOwnership === 'expo';
 
-  const hasGoogleClientIds = isExpoGo
-    ? Boolean(GOOGLE_WEB_CLIENT_ID)
-    : Platform.OS === 'ios'
-      ? Boolean(GOOGLE_IOS_CLIENT_ID)
-      : Platform.OS === 'android'
-        ? Boolean(GOOGLE_ANDROID_CLIENT_ID)
-        : Boolean(GOOGLE_WEB_CLIENT_ID);
-  const missingClientIdHint = isExpoGo
-    ? 'Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for Expo Go.'
-    : Platform.OS === 'ios'
-      ? 'Set EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID for iOS.'
-      : Platform.OS === 'android'
-        ? 'Set EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID for Android.'
-        : 'Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for web.';
+  const hasGoogleClientIds = Platform.OS === 'ios'
+    ? Boolean(GOOGLE_IOS_CLIENT_ID)
+    : Platform.OS === 'android'
+      ? Boolean(GOOGLE_ANDROID_CLIENT_ID)
+      : Boolean(GOOGLE_WEB_CLIENT_ID);
+  const missingClientIdHint = Platform.OS === 'ios'
+    ? 'Set EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID for iOS.'
+    : Platform.OS === 'android'
+      ? 'Set EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID for Android.'
+      : 'Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for web.';
 
   return (
     <SafeAreaView style={styles.safeArea}>
