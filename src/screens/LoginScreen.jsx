@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { makeRedirectUri } from 'expo-auth-session';
+import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { THEMES } from '../theme';
@@ -13,20 +13,25 @@ const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_I
 const EXPO_PROXY_PROJECT = '@adylagad/ecolens-mobile';
 
 function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
-  const redirectUri = makeRedirectUri({
-    useProxy: true,
-    projectNameForProxy: EXPO_PROXY_PROJECT,
-  });
+  const isExpoGo = Constants.appOwnership === 'expo';
+  const redirectOptions = isExpoGo
+    ? {
+        useProxy: true,
+        projectNameForProxy: EXPO_PROXY_PROJECT,
+      }
+    : undefined;
 
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-    webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
-    redirectUri,
-    scopes: ['openid', 'profile', 'email'],
-  });
+  const [request, response, promptAsync] = Google.useAuthRequest(
+    {
+      expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+      webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+      iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+      androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
+      scopes: ['openid', 'profile', 'email'],
+    },
+    redirectOptions
+  );
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -83,7 +88,11 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
       ]}
       onPress={() => {
         setAuthError('');
-        promptAsync({ useProxy: true });
+        if (isExpoGo) {
+          promptAsync({ useProxy: true, projectNameForProxy: EXPO_PROXY_PROJECT });
+        } else {
+          promptAsync();
+        }
       }}
     >
       {loadingProfile ? (
