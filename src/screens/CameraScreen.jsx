@@ -148,6 +148,7 @@ function buildScoreBreakdown(result) {
 
 export default function CameraScreen() {
   const cameraProviderRef = useRef(null);
+  const scrollViewRef = useRef(null);
   const resultAnim = useRef(new Animated.Value(0)).current;
 
   const [themeName, setThemeName] = useState('dark');
@@ -182,6 +183,12 @@ export default function CameraScreen() {
       duration: 250,
       useNativeDriver: true,
     }).start();
+
+    const timer = setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 180);
+
+    return () => clearTimeout(timer);
   }, [result, resultAnim]);
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
@@ -274,7 +281,7 @@ export default function CameraScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
           <View style={styles.heroTopRow}>
             <Text style={styles.eyebrow}>EcoLens</Text>
@@ -387,7 +394,7 @@ export default function CameraScreen() {
         </View>
 
         <Pressable
-          onPress={handleAnalyze}
+          onPress={() => handleAnalyze()}
           disabled={loading}
           style={({ pressed }) => [
             styles.analyzeButton,
