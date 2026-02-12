@@ -93,6 +93,59 @@ function getConfidenceTone(confidence) {
   return { bg: '#7F1D1D', text: '#FEE2E2', label: 'Confidence: Low' };
 }
 
+function buildScoreBreakdown(result) {
+  if (!result) {
+    return [];
+  }
+
+  const rows = [];
+  const name = String(result.name ?? '').toLowerCase();
+  const category = String(result.category ?? '').toLowerCase();
+  const combined = `${name} ${category}`;
+  const co2 = typeof result.co2Gram === 'number' ? result.co2Gram : null;
+  const recyclability = String(result.recyclability ?? '').toLowerCase();
+
+  if (combined.includes('reusable') || combined.includes('refillable')) {
+    rows.push({ label: 'Reusable/refillable item', delta: '+18' });
+  }
+  if (combined.includes('single-use') || combined.includes('single use') || combined.includes('disposable')) {
+    rows.push({ label: 'Single-use item pattern', delta: '-18' });
+  }
+  if (combined.includes('plastic')) {
+    rows.push({ label: 'Plastic material impact', delta: '-10' });
+  }
+  if (combined.includes('cloth') || combined.includes('recycled')) {
+    rows.push({ label: 'Lower-impact material', delta: '+10' });
+  }
+
+  if (recyclability.includes('high')) {
+    rows.push({ label: 'High recyclability', delta: '+10' });
+  } else if (recyclability.includes('medium')) {
+    rows.push({ label: 'Medium recyclability', delta: '+3' });
+  } else if (recyclability.includes('low') || recyclability.includes('unknown')) {
+    rows.push({ label: 'Low recyclability', delta: '-8' });
+  }
+
+  if (co2 !== null) {
+    if (co2 <= 20) {
+      rows.push({ label: 'Very low CO2 footprint', delta: '+10' });
+    } else if (co2 <= 50) {
+      rows.push({ label: 'Low CO2 footprint', delta: '+7' });
+    } else if (co2 <= 100) {
+      rows.push({ label: 'Moderate CO2 footprint', delta: '+2' });
+    } else if (co2 > 200) {
+      rows.push({ label: 'High CO2 footprint', delta: '-10' });
+    } else {
+      rows.push({ label: 'Elevated CO2 footprint', delta: '-4' });
+    }
+  }
+
+  if (!rows.length) {
+    rows.push({ label: 'Baseline scoring applied', delta: '0' });
+  }
+  return rows;
+}
+
 export default function CameraScreen() {
   const cameraProviderRef = useRef(null);
   const resultAnim = useRef(new Animated.Value(0)).current;
@@ -106,6 +159,7 @@ export default function CameraScreen() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
+  const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
 
   const palette = THEMES[themeName];
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -119,6 +173,7 @@ export default function CameraScreen() {
   useEffect(() => {
     if (!result) {
       resultAnim.setValue(0);
+      setIsBreakdownOpen(false);
       return;
     }
 
@@ -215,6 +270,7 @@ export default function CameraScreen() {
     });
     return ranked.slice(0, 3);
   }, [manualLabelOptions, result, showLowConfidenceHelp]);
+  const scoreBreakdown = useMemo(() => buildScoreBreakdown(result), [result]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -433,6 +489,37 @@ export default function CameraScreen() {
                 </View>
               </View>
             ) : null}
+
+            <View style={styles.breakdownCard}>
+              <Pressable
+                style={styles.breakdownHeader}
+                onPress={() => setIsBreakdownOpen((prev) => !prev)}
+              >
+                <Text style={styles.breakdownTitle}>Why this score</Text>
+                <Text style={styles.breakdownToggle}>{isBreakdownOpen ? 'Hide ▲' : 'Show ▼'}</Text>
+              </Pressable>
+              {isBreakdownOpen ? (
+                <View style={styles.breakdownList}>
+                  {scoreBreakdown.map((row, index) => (
+                    <View key={`${row.label}-${index}`} style={styles.breakdownRow}>
+                      <Text style={styles.breakdownLabel}>{row.label}</Text>
+                      <Text
+                        style={[
+                          styles.breakdownDelta,
+                          row.delta.startsWith('+')
+                            ? styles.breakdownDeltaPositive
+                            : row.delta.startsWith('-')
+                              ? styles.breakdownDeltaNegative
+                              : styles.breakdownDeltaNeutral,
+                        ]}
+                      >
+                        {row.delta}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
           </Animated.View>
         ) : null}
       </ScrollView>
@@ -785,6 +872,62 @@ function createStyles(palette) {
       color: palette.textPrimary,
       fontSize: 12,
       fontWeight: '700',
+    },
+    breakdownCard: {
+      backgroundColor: palette.cardAlt,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 10,
+      padding: 10,
+      gap: 8,
+    },
+    breakdownHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    breakdownTitle: {
+      color: palette.textPrimary,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    breakdownToggle: {
+      color: palette.textSecondary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    breakdownList: {
+      gap: 6,
+    },
+    breakdownRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      paddingVertical: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
+    },
+    breakdownLabel: {
+      flex: 1,
+      color: palette.textSecondary,
+      fontSize: 12,
+    },
+    breakdownDelta: {
+      fontSize: 12,
+      fontWeight: '800',
+      minWidth: 26,
+      textAlign: 'right',
+    },
+    breakdownDeltaPositive: {
+      color: '#22C55E',
+    },
+    breakdownDeltaNegative: {
+      color: '#EF4444',
+    },
+    breakdownDeltaNeutral: {
+      color: palette.textSecondary,
     },
     modalBackdrop: {
       flex: 1,
