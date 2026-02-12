@@ -17,6 +17,7 @@ import { DEV_API_BASE_URL, PROD_API_BASE_URL } from '../config';
 
 const LABEL_OPTIONS = [
   { label: 'Auto-detect from camera', value: '' },
+  { label: 'Use bundled test image', value: '__test_image__' },
   { label: 'Single-use Plastic Bottle', value: 'Single-use Plastic Bottle' },
   { label: 'Paper Coffee Cup', value: 'Paper Coffee Cup' },
   { label: 'LED Light Bulb', value: 'LED Light Bulb' },
@@ -69,7 +70,11 @@ export default function CameraScreen() {
         confidence: 0.9,
       };
 
-      if (!selectedLabel) {
+      if (selectedLabel === '__test_image__') {
+        const imageBase64 = await loadDefaultImageBase64();
+        payload.detectedLabel = '';
+        payload.imageBase64 = imageBase64;
+      } else if (!selectedLabel) {
         try {
           const imageBase64 = await cameraProviderRef.current?.captureImage();
           if (!imageBase64) {
@@ -77,21 +82,12 @@ export default function CameraScreen() {
           }
           payload.imageBase64 = imageBase64;
         } catch (captureError) {
-          try {
-            const imageBase64 = await loadDefaultImageBase64();
-            payload.detectedLabel = '';
-            payload.imageBase64 = imageBase64;
-            setMessage(
-              `Camera capture unavailable (${captureError.message}). Using bundled test image instead.`
-            );
-          } catch (defaultImageError) {
-            const fallbackLabel = LABEL_OPTIONS[1].value;
-            payload.detectedLabel = fallbackLabel;
-            setSelectedLabel(fallbackLabel);
-            setMessage(
-              `Camera unavailable and test image failed (${defaultImageError.message}). Falling back to manual label.`
-            );
-          }
+          const fallbackLabel = LABEL_OPTIONS[2].value;
+          payload.detectedLabel = fallbackLabel;
+          setSelectedLabel(fallbackLabel);
+          setMessage(
+            `Camera capture unavailable (${captureError.message}). Falling back to manual label.`
+          );
         }
       }
 
