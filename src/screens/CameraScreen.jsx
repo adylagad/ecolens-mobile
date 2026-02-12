@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -21,6 +22,47 @@ const LABEL_OPTIONS = [
   { label: 'Paper Coffee Cup', value: 'Paper Coffee Cup' },
   { label: 'LED Light Bulb', value: 'LED Light Bulb' },
 ];
+
+const THEMES = {
+  dark: {
+    page: '#07111F',
+    card: '#0F172A',
+    cardAlt: '#131F34',
+    border: '#25324A',
+    textPrimary: '#F8FAFC',
+    textSecondary: '#94A3B8',
+    action: '#16A34A',
+    actionText: '#F8FAFC',
+    input: '#0A1425',
+    modalBackdrop: 'rgba(2, 6, 23, 0.7)',
+    modeActiveBg: '#0EA5E9',
+    modeActiveText: '#082F49',
+    modeText: '#E2E8F0',
+    noticeInfoBg: '#0C4A6E',
+    noticeInfoBorder: '#0369A1',
+    noticeErrorBg: '#7F1D1D',
+    noticeErrorBorder: '#B91C1C',
+  },
+  light: {
+    page: '#F1F5F9',
+    card: '#FFFFFF',
+    cardAlt: '#F8FAFC',
+    border: '#D1D5DB',
+    textPrimary: '#0F172A',
+    textSecondary: '#475569',
+    action: '#16A34A',
+    actionText: '#F8FAFC',
+    input: '#FFFFFF',
+    modalBackdrop: 'rgba(15, 23, 42, 0.35)',
+    modeActiveBg: '#0EA5E9',
+    modeActiveText: '#082F49',
+    modeText: '#0F172A',
+    noticeInfoBg: '#E0F2FE',
+    noticeInfoBorder: '#7DD3FC',
+    noticeErrorBg: '#FEE2E2',
+    noticeErrorBorder: '#FCA5A5',
+  },
+};
 
 function getScoreTone(score) {
   if (typeof score !== 'number') {
@@ -42,6 +84,7 @@ export default function CameraScreen() {
   const cameraProviderRef = useRef(null);
   const resultAnim = useRef(new Animated.Value(0)).current;
 
+  const [themeName, setThemeName] = useState('dark');
   const [apiMode, setApiMode] = useState('production');
   const [devBaseUrl, setDevBaseUrl] = useState(DEV_API_BASE_URL);
   const [selectedLabel, setSelectedLabel] = useState('');
@@ -51,6 +94,8 @@ export default function CameraScreen() {
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
 
+  const palette = THEMES[themeName];
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const selectedLabelText =
     LABEL_OPTIONS.find((option) => option.value === selectedLabel)?.label || LABEL_OPTIONS[0].label;
@@ -63,7 +108,7 @@ export default function CameraScreen() {
 
     Animated.timing(resultAnim, {
       toValue: 1,
-      duration: 320,
+      duration: 250,
       useNativeDriver: true,
     }).start();
   }, [result, resultAnim]);
@@ -138,12 +183,46 @@ export default function CameraScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View pointerEvents="none" style={styles.backgroundOrbTop} />
-      <View pointerEvents="none" style={styles.backgroundOrbBottom} />
-
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
-          <Text style={styles.eyebrow}>EcoLens</Text>
+          <View style={styles.heroTopRow}>
+            <Text style={styles.eyebrow}>EcoLens</Text>
+            <View style={styles.themeToggle}>
+              <Pressable
+                onPress={() => setThemeName('light')}
+                style={[
+                  styles.themeToggleButton,
+                  themeName === 'light' ? styles.themeToggleButtonActive : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.themeToggleText,
+                    themeName === 'light' ? styles.themeToggleTextActive : null,
+                  ]}
+                >
+                  Light
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setThemeName('dark')}
+                style={[
+                  styles.themeToggleButton,
+                  themeName === 'dark' ? styles.themeToggleButtonActive : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.themeToggleText,
+                    themeName === 'dark' ? styles.themeToggleTextActive : null,
+                  ]}
+                >
+                  Dark
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
           <Text style={styles.title}>Scan. Understand. Improve.</Text>
           <Text style={styles.subtitle}>
             Detect everyday products and get a practical eco rating with better alternatives.
@@ -193,7 +272,7 @@ export default function CameraScreen() {
                 autoCorrect={false}
                 style={styles.urlInput}
                 placeholder="http://192.168.x.x:8080"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={palette.textSecondary}
               />
             </View>
           ) : null}
@@ -210,30 +289,10 @@ export default function CameraScreen() {
           </View>
 
           <Text style={styles.fieldLabel}>Label mode</Text>
-          <Pressable
-            onPress={() => setIsDropdownOpen((prev) => !prev)}
-            style={styles.dropdownTrigger}
-          >
+          <Pressable onPress={() => setIsDropdownOpen(true)} style={styles.dropdownTrigger}>
             <Text style={styles.dropdownLabel}>{selectedLabelText}</Text>
-            <Text style={styles.caret}>{isDropdownOpen ? '▲' : '▼'}</Text>
+            <Text style={styles.caret}>▼</Text>
           </Pressable>
-
-          {isDropdownOpen ? (
-            <View style={styles.dropdownList}>
-              {LABEL_OPTIONS.map((option) => (
-                <Pressable
-                  key={option.label}
-                  onPress={() => {
-                    setSelectedLabel(option.value);
-                    setIsDropdownOpen(false);
-                  }}
-                  style={styles.dropdownItem}
-                >
-                  <Text style={styles.dropdownItemText}>{option.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
         </View>
 
         <Pressable
@@ -246,7 +305,7 @@ export default function CameraScreen() {
           ]}
         >
           {loading ? (
-            <ActivityIndicator color="#F8FAFC" />
+            <ActivityIndicator color={palette.actionText} />
           ) : (
             <Text style={styles.analyzeButtonText}>Analyze Item</Text>
           )}
@@ -260,7 +319,9 @@ export default function CameraScreen() {
 
         {error ? (
           <View style={[styles.noticeCard, styles.errorCard]}>
-            <Text style={styles.noticeText}>{error}</Text>
+            <Text style={[styles.noticeText, themeName === 'light' ? styles.noticeTextLightError : null]}>
+              {error}
+            </Text>
           </View>
         ) : null}
 
@@ -274,7 +335,7 @@ export default function CameraScreen() {
                   {
                     translateY: resultAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [10, 0],
+                      outputRange: [8, 0],
                     }),
                   },
                 ],
@@ -313,281 +374,379 @@ export default function CameraScreen() {
           </Animated.View>
         ) : null}
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isDropdownOpen}
+        onRequestClose={() => setIsDropdownOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setIsDropdownOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose Label Mode</Text>
+              <Pressable onPress={() => setIsDropdownOpen(false)} style={styles.modalCloseButton}>
+                <Text style={styles.modalCloseText}>Close</Text>
+              </Pressable>
+            </View>
+            {LABEL_OPTIONS.map((option) => (
+              <Pressable
+                key={option.label}
+                onPress={() => {
+                  setSelectedLabel(option.value);
+                  setIsDropdownOpen(false);
+                }}
+                style={[
+                  styles.modalOption,
+                  selectedLabel === option.value ? styles.modalOptionActive : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.modalOptionText,
+                    selectedLabel === option.value ? styles.modalOptionTextActive : null,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#060C17',
-  },
-  backgroundOrbTop: {
-    position: 'absolute',
-    top: -100,
-    right: -70,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: '#1D4ED8',
-    opacity: 0.2,
-  },
-  backgroundOrbBottom: {
-    position: 'absolute',
-    bottom: -110,
-    left: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: '#059669',
-    opacity: 0.15,
-  },
-  container: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 28,
-  },
-  heroCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
-  },
-  eyebrow: {
-    fontSize: 12,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    color: '#93C5FD',
-    marginBottom: 6,
-    fontWeight: '700',
-  },
-  title: {
-    fontSize: 28,
-    color: '#F8FAFC',
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  subtitle: {
-    color: '#CBD5E1',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sectionCard: {
-    backgroundColor: '#0B1221',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-    gap: 10,
-  },
-  sectionTitle: {
-    color: '#E2E8F0',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  sectionHint: {
-    color: '#94A3B8',
-    fontSize: 13,
-  },
-  modeRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modeButton: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    backgroundColor: '#0F172A',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeButtonActive: {
-    backgroundColor: '#0EA5E9',
-    borderColor: '#0EA5E9',
-  },
-  modeButtonText: {
-    color: '#E2E8F0',
-    fontWeight: '700',
-  },
-  modeButtonTextActive: {
-    color: '#082F49',
-  },
-  devUrlBlock: {
-    gap: 6,
-  },
-  fieldLabel: {
-    color: '#CBD5E1',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  urlInput: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 12,
-    color: '#F1F5F9',
-  },
-  endpointText: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  cameraFrame: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  dropdownTrigger: {
-    minHeight: 46,
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dropdownLabel: {
-    color: '#F1F5F9',
-    fontSize: 14,
-    flex: 1,
-    marginRight: 8,
-  },
-  caret: {
-    color: '#94A3B8',
-  },
-  dropdownList: {
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#0F172A',
-  },
-  dropdownItem: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-  },
-  dropdownItemText: {
-    color: '#E2E8F0',
-  },
-  analyzeButton: {
-    minHeight: 56,
-    backgroundColor: '#16A34A',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#16A34A',
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  analyzeButtonPressed: {
-    opacity: 0.92,
-  },
-  analyzeButtonDisabled: {
-    opacity: 0.75,
-  },
-  analyzeButtonText: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  noticeCard: {
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-  },
-  infoCard: {
-    backgroundColor: '#0C4A6E',
-    borderColor: '#0369A1',
-  },
-  errorCard: {
-    backgroundColor: '#7F1D1D',
-    borderColor: '#B91C1C',
-  },
-  noticeText: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  resultCard: {
-    backgroundColor: '#0B1221',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-    gap: 10,
-  },
-  resultHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  resultTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#F8FAFC',
-  },
-  scoreBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  scoreBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  metricRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  metricItem: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    padding: 10,
-    gap: 2,
-  },
-  metricLabel: {
-    color: '#94A3B8',
-    fontSize: 12,
-  },
-  metricValue: {
-    color: '#E2E8F0',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  resultLine: {
-    color: '#CBD5E1',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  resultLineLabel: {
-    color: '#F8FAFC',
-    fontWeight: '700',
-  },
-  resultFootnote: {
-    color: '#94A3B8',
-    fontSize: 12,
-  },
-});
+function createStyles(palette) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: palette.page,
+    },
+    container: {
+      padding: 16,
+      gap: 14,
+      paddingBottom: 28,
+    },
+    heroCard: {
+      backgroundColor: palette.card,
+      borderRadius: 18,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: palette.border,
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+      gap: 6,
+    },
+    heroTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    eyebrow: {
+      fontSize: 12,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: '#38BDF8',
+      fontWeight: '700',
+    },
+    themeToggle: {
+      flexDirection: 'row',
+      gap: 6,
+      backgroundColor: palette.input,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 999,
+      padding: 3,
+    },
+    themeToggleButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+    },
+    themeToggleButtonActive: {
+      backgroundColor: '#0EA5E9',
+    },
+    themeToggleText: {
+      color: palette.textSecondary,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    themeToggleTextActive: {
+      color: '#082F49',
+    },
+    title: {
+      fontSize: 26,
+      color: palette.textPrimary,
+      fontWeight: '800',
+    },
+    subtitle: {
+      color: palette.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    sectionCard: {
+      backgroundColor: palette.card,
+      borderRadius: 16,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: palette.border,
+      gap: 10,
+    },
+    sectionTitle: {
+      color: palette.textPrimary,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    sectionHint: {
+      color: palette.textSecondary,
+      fontSize: 13,
+    },
+    modeRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modeButton: {
+      flex: 1,
+      minHeight: 42,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modeButtonActive: {
+      backgroundColor: palette.modeActiveBg,
+      borderColor: palette.modeActiveBg,
+    },
+    modeButtonText: {
+      color: palette.modeText,
+      fontWeight: '700',
+    },
+    modeButtonTextActive: {
+      color: palette.modeActiveText,
+    },
+    devUrlBlock: {
+      gap: 6,
+    },
+    fieldLabel: {
+      color: palette.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    urlInput: {
+      minHeight: 44,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 10,
+      backgroundColor: palette.input,
+      paddingHorizontal: 12,
+      color: palette.textPrimary,
+    },
+    endpointText: {
+      fontSize: 12,
+      color: palette.textSecondary,
+    },
+    cameraFrame: {
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    dropdownTrigger: {
+      minHeight: 46,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 12,
+      backgroundColor: palette.input,
+      paddingHorizontal: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    dropdownLabel: {
+      color: palette.textPrimary,
+      fontSize: 14,
+      flex: 1,
+      marginRight: 8,
+    },
+    caret: {
+      color: palette.textSecondary,
+      fontWeight: '700',
+    },
+    analyzeButton: {
+      minHeight: 56,
+      backgroundColor: palette.action,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: palette.action,
+      shadowOpacity: 0.35,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+    analyzeButtonPressed: {
+      opacity: 0.92,
+    },
+    analyzeButtonDisabled: {
+      opacity: 0.75,
+    },
+    analyzeButtonText: {
+      color: palette.actionText,
+      fontSize: 18,
+      fontWeight: '800',
+    },
+    noticeCard: {
+      borderRadius: 10,
+      padding: 12,
+      borderWidth: 1,
+    },
+    infoCard: {
+      backgroundColor: palette.noticeInfoBg,
+      borderColor: palette.noticeInfoBorder,
+    },
+    errorCard: {
+      backgroundColor: palette.noticeErrorBg,
+      borderColor: palette.noticeErrorBorder,
+    },
+    noticeText: {
+      color: palette.textPrimary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    noticeTextLightError: {
+      color: '#7F1D1D',
+    },
+    resultCard: {
+      backgroundColor: palette.card,
+      borderRadius: 14,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: palette.border,
+      gap: 10,
+    },
+    resultHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    resultTitle: {
+      flex: 1,
+      fontSize: 20,
+      fontWeight: '800',
+      color: palette.textPrimary,
+    },
+    scoreBadge: {
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    scoreBadgeText: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.4,
+    },
+    metricRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    metricItem: {
+      flex: 1,
+      backgroundColor: palette.cardAlt,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: palette.border,
+      padding: 10,
+      gap: 2,
+    },
+    metricLabel: {
+      color: palette.textSecondary,
+      fontSize: 12,
+    },
+    metricValue: {
+      color: palette.textPrimary,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    resultLine: {
+      color: palette.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    resultLineLabel: {
+      color: palette.textPrimary,
+      fontWeight: '700',
+    },
+    resultFootnote: {
+      color: palette.textSecondary,
+      fontSize: 12,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: palette.modalBackdrop,
+      justifyContent: 'flex-end',
+      padding: 16,
+    },
+    modalSheet: {
+      backgroundColor: palette.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: palette.border,
+      padding: 12,
+      gap: 6,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+    },
+    modalTitle: {
+      color: palette.textPrimary,
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    modalCloseButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+    },
+    modalCloseText: {
+      color: palette.textSecondary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    modalOption: {
+      minHeight: 44,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+    },
+    modalOptionActive: {
+      borderColor: '#0EA5E9',
+      backgroundColor: '#0EA5E9',
+    },
+    modalOptionText: {
+      color: palette.textPrimary,
+      fontWeight: '600',
+    },
+    modalOptionTextActive: {
+      color: '#082F49',
+      fontWeight: '800',
+    },
+  });
+}
