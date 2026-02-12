@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -9,6 +10,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system';
 import CameraProvider from '../clients/CameraProvider';
 import { DEV_API_BASE_URL, PROD_API_BASE_URL } from '../config';
 
@@ -31,6 +34,29 @@ export default function CameraScreen() {
   const [result, setResult] = useState(null);
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
 
+  const loadDefaultImageBase64 = async () => {
+    const testAsset = Asset.fromModule(require('../../assets/test-image.png'));
+    if (!testAsset.localUri) {
+      await testAsset.downloadAsync();
+    }
+
+    const assetUri = testAsset.localUri || testAsset.uri;
+    const normalizedUri =
+      Platform.OS === 'ios' && assetUri.startsWith('file://')
+        ? assetUri.replace('file://', '')
+        : assetUri;
+
+    const imageBase64 = await FileSystem.readAsStringAsync(normalizedUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    if (!imageBase64) {
+      throw new Error('Default test image could not be loaded.');
+    }
+
+    return imageBase64;
+  };
+
   const handleAnalyze = async () => {
     setLoading(true);
     setError('');
@@ -51,12 +77,21 @@ export default function CameraScreen() {
           }
           payload.imageBase64 = imageBase64;
         } catch (captureError) {
-          const fallbackLabel = LABEL_OPTIONS[1].value;
-          payload.detectedLabel = fallbackLabel;
-          setSelectedLabel(fallbackLabel);
-          setMessage(
-            `Camera capture unavailable (${captureError.message}). Falling back to manual label.`
-          );
+          try {
+            const imageBase64 = await loadDefaultImageBase64();
+            payload.detectedLabel = '';
+            payload.imageBase64 = imageBase64;
+            setMessage(
+              `Camera capture unavailable (${captureError.message}). Using bundled test image instead.`
+            );
+          } catch (defaultImageError) {
+            const fallbackLabel = LABEL_OPTIONS[1].value;
+            payload.detectedLabel = fallbackLabel;
+            setSelectedLabel(fallbackLabel);
+            setMessage(
+              `Camera unavailable and test image failed (${defaultImageError.message}). Falling back to manual label.`
+            );
+          }
         }
       }
 
