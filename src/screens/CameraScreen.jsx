@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 import CameraProvider from '../clients/CameraProvider';
-import { DEV_API_BASE_URL, PROD_API_BASE_URL } from '../config';
 import { TEST_IMAGE_BASE64 } from '../config/testImageBase64';
 
 const LABEL_OPTIONS = [
@@ -227,10 +226,15 @@ function getGreenerAlternativeLabel(result) {
 }
 
 export default function CameraScreen({
-  scanHistory = [],
   setScanHistory = () => {},
+  setHistoryStats = () => {},
   goalState,
   setGoalState = () => {},
+  apiMode = 'production',
+  setApiMode = () => {},
+  devBaseUrl = '',
+  setDevBaseUrl = () => {},
+  apiBaseUrl = '',
 }) {
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
@@ -238,8 +242,6 @@ export default function CameraScreen({
   const resultAnim = useRef(new Animated.Value(0)).current;
 
   const [themeName, setThemeName] = useState('dark');
-  const [apiMode, setApiMode] = useState('production');
-  const [devBaseUrl, setDevBaseUrl] = useState(DEV_API_BASE_URL);
   const [selectedLabel, setSelectedLabel] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -252,7 +254,6 @@ export default function CameraScreen({
 
   const palette = THEMES[themeName];
   const styles = useMemo(() => createStyles(palette), [palette]);
-  const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const selectedLabelText =
     LABEL_OPTIONS.find((option) => option.value === selectedLabel)?.label || LABEL_OPTIONS[0].label;
   const manualLabelOptions = LABEL_OPTIONS.filter(
@@ -462,20 +463,102 @@ export default function CameraScreen({
     }, 50);
   };
 
-  const handleSaveResult = () => {
+  const handleSaveResult = async () => {
     if (!result) {
       return;
     }
-    const entry = {
-      id: `${Date.now()}`,
+    const ecoScore =
+      typeof result.ecoScore === 'number' && Number.isFinite(result.ecoScore)
+        ? Math.round(result.ecoScore)
+        : Number.parseInt(String(result.ecoScore ?? '0'), 10) || 0;
+    const confidence =
+      typeof result.confidence === 'number' && Number.isFinite(result.confidence)
+        ? result.confidence
+        : Number.parseFloat(String(result.confidence ?? '0')) || 0;
+    const requestBody = {
       item: String(result.name ?? 'Unknown item'),
-      category: String(result.category ?? '-'),
-      ecoScore: typeof result.ecoScore === 'number' ? result.ecoScore : Number(result.ecoScore ?? 0),
-      confidence: typeof result.confidence === 'number' ? result.confidence : Number(result.confidence ?? 0),
-      timestamp: new Date().toISOString(),
+      category: String(result.category ?? 'unknown'),
+      ecoScore,
+      confidence,
     };
-    setScanHistory((prev) => [entry, ...prev].slice(0, 40));
-    setMessage('Saved to local scan history.');
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      let savedEntry = null;
+      try {
+        savedEntry = await response.json();
+      } catch (parseError) {
+        savedEntry = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(savedEntry?.message || `Save failed (${response.status})`);
+      }
+
+      const normalizedEntry = {
+        id: String(savedEntry?.id ?? Date.now()),
+        item: String(savedEntry?.item ?? requestBody.item),
+        category: String(savedEntry?.category ?? requestBody.category),
+        ecoScore:
+          typeof savedEntry?.ecoScore === 'number' ? savedEntry.ecoScore : requestBody.ecoScore,
+        confidence:
+          typeof savedEntry?.confidence === 'number'
+            ? savedEntry.confidence
+            : requestBody.confidence,
+        timestamp: String(savedEntry?.timestamp ?? new Date().toISOString()),
+      };
+
+      setScanHistory((prev) => [normalizedEntry, ...prev].slice(0, 40));
+
+      try {
+        const statsResponse = await fetch(`${apiBaseUrl}/api/history/stats`);
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          setHistoryStats({
+            avgScore: statsData?.avgScore ?? null,
+            highImpactCount: statsData?.highImpactCount ?? 0,
+            greenerCount: statsData?.greenerCount ?? 0,
+          });
+        }
+      } catch (statsError) {
+        // Keep UI responsive even if stats refresh fails.
+      }
+
+      setMessage('Saved to backend history.');
+      setError('');
+      return;
+    } catch (saveError) {
+      const fallbackEntry = {
+        id: `${Date.now()}`,
+        item: requestBody.item,
+        category: requestBody.category,
+        ecoScore: requestBody.ecoScore,
+        confidence: requestBody.confidence,
+        timestamp: new Date().toISOString(),
+      };
+      setScanHistory((prev) => {
+        const nextHistory = [fallbackEntry, ...prev].slice(0, 40);
+        const total = nextHistory.length;
+        const avgScore = total
+          ? nextHistory.reduce((sum, entry) => sum + (Number(entry.ecoScore) || 0), 0) / total
+          : null;
+        const highImpactCount = nextHistory.filter((entry) => Number(entry.ecoScore) < 40).length;
+        const greenerCount = nextHistory.filter((entry) => Number(entry.ecoScore) >= 85).length;
+        setHistoryStats({
+          avgScore,
+          highImpactCount,
+          greenerCount,
+        });
+        return nextHistory;
+      });
+      setMessage('Saved locally. Backend history was unavailable.');
+      setError(saveError.message ? `History sync failed: ${saveError.message}` : 'History sync failed.');
+    }
   };
 
   const handleTryGreenerAlternative = () => {

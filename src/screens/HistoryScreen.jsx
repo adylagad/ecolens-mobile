@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-export default function HistoryScreen({ scanHistory = [] }) {
+export default function HistoryScreen({ scanHistory = [], stats = null }) {
   const [highImpactOnly, setHighImpactOnly] = useState(false);
 
   const visibleHistory = useMemo(
@@ -9,7 +9,7 @@ export default function HistoryScreen({ scanHistory = [] }) {
     [highImpactOnly, scanHistory]
   );
 
-  const stats = useMemo(() => {
+  const localStats = useMemo(() => {
     if (!scanHistory.length) {
       return { avgScore: null, highImpactCount: 0, greenerCount: 0 };
     }
@@ -20,6 +20,12 @@ export default function HistoryScreen({ scanHistory = [] }) {
     const greenerCount = scanHistory.filter((entry) => entry.ecoScore >= 85).length;
     return { avgScore, highImpactCount, greenerCount };
   }, [scanHistory]);
+
+  const resolvedStats = {
+    avgScore: stats?.avgScore ?? localStats.avgScore,
+    highImpactCount: stats?.highImpactCount ?? localStats.highImpactCount,
+    greenerCount: stats?.greenerCount ?? localStats.greenerCount,
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -41,15 +47,17 @@ export default function HistoryScreen({ scanHistory = [] }) {
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>Avg score</Text>
-              <Text style={styles.statValue}>{stats.avgScore === null ? '-' : stats.avgScore.toFixed(1)}</Text>
+              <Text style={styles.statValue}>
+                {resolvedStats.avgScore === null ? '-' : resolvedStats.avgScore.toFixed(1)}
+              </Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>High impact</Text>
-              <Text style={styles.statValue}>{stats.highImpactCount}</Text>
+              <Text style={styles.statValue}>{resolvedStats.highImpactCount}</Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statLabel}>Greener picks</Text>
-              <Text style={styles.statValue}>{stats.greenerCount}</Text>
+              <Text style={styles.statValue}>{resolvedStats.greenerCount}</Text>
             </View>
           </View>
         </View>
