@@ -93,6 +93,33 @@ function getConfidenceTone(confidence) {
   return { bg: '#7F1D1D', text: '#FEE2E2', label: 'Confidence: Low' };
 }
 
+const GOAL_TARGET = 5;
+const LOADING_STAGES = ['Uploading', 'Detecting', 'Scoring'];
+
+function getWeekKey(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${weekNo}`;
+}
+
+function isSingleUseResult(result) {
+  if (!result) {
+    return false;
+  }
+  const combined = `${String(result.name ?? '')} ${String(result.category ?? '')}`.toLowerCase();
+  return (
+    combined.includes('single-use') ||
+    combined.includes('single use') ||
+    combined.includes('disposable') ||
+    combined.includes('plastic bag') ||
+    combined.includes('plastic straw') ||
+    combined.includes('paper cup')
+  );
+}
+
 function buildScoreBreakdown(result) {
   if (!result) {
     return [];
@@ -210,12 +237,19 @@ export default function CameraScreen() {
   const [selectedLabel, setSelectedLabel] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingStageIndex, setLoadingStageIndex] = useState(0);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [scanHistory, setScanHistory] = useState([]);
   const [highImpactOnly, setHighImpactOnly] = useState(false);
+  const [goalState, setGoalState] = useState({
+    weekKey: getWeekKey(),
+    avoidedSingleUseCount: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+  });
 
   const palette = THEMES[themeName];
   const styles = useMemo(() => createStyles(palette), [palette]);
@@ -246,6 +280,19 @@ export default function CameraScreen() {
 
     return () => clearTimeout(timer);
   }, [result, resultAnim]);
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStageIndex(0);
+      return undefined;
+    }
+    const interval = setInterval(() => {
+      setLoadingStageIndex((prev) => (prev + 1) % LOADING_STAGES.length);
+    }, 900);
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  const loadingStage = LOADING_STAGES[loadingStageIndex];
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
@@ -303,6 +350,24 @@ export default function CameraScreen() {
       if (!response.ok) {
         throw new Error(data?.message || `Request failed (${response.status})`);
       }
+      const singleUse = isSingleUseResult(data);
+      setGoalState((prev) => {
+        const currentWeek = getWeekKey();
+        const base =
+          prev.weekKey === currentWeek
+            ? prev
+            : { weekKey: currentWeek, avoidedSingleUseCount: 0, currentStreak: prev.currentStreak, bestStreak: prev.bestStreak };
+        const nextStreak = singleUse ? 0 : base.currentStreak + 1;
+        const nextBest = Math.max(base.bestStreak, nextStreak);
+        return {
+          weekKey: currentWeek,
+          avoidedSingleUseCount: singleUse
+            ? base.avoidedSingleUseCount
+            : Math.min(base.avoidedSingleUseCount + 1, GOAL_TARGET),
+          currentStreak: nextStreak,
+          bestStreak: nextBest,
+        };
+      });
       setResult(data);
     } catch (fetchError) {
       setError(
@@ -351,6 +416,7 @@ export default function CameraScreen() {
     const greenerCount = scanHistory.filter((entry) => entry.ecoScore >= 85).length;
     return { avgScore, highImpactCount, greenerCount };
   }, [scanHistory]);
+  const goalProgress = Math.min(goalState.avoidedSingleUseCount / GOAL_TARGET, 1);
 
   const handleScanAgain = () => {
     setResult(null);
@@ -435,6 +501,24 @@ export default function CameraScreen() {
         </View>
 
         <View style={styles.sectionCard}>
+          <View style={styles.goalHeaderRow}>
+            <Text style={styles.sectionTitle}>Weekly Goal</Text>
+            <Text style={styles.goalWeekText}>{goalState.weekKey}</Text>
+          </View>
+          <Text style={styles.sectionHint}>Avoid 5 single-use items this week.</Text>
+          <View style={styles.goalProgressTrack}>
+            <View style={[styles.goalProgressFill, { width: `${goalProgress * 100}%` }]} />
+          </View>
+          <View style={styles.goalStatsRow}>
+            <Text style={styles.goalStatText}>
+              Progress: {goalState.avoidedSingleUseCount}/{GOAL_TARGET}
+            </Text>
+            <Text style={styles.goalStatText}>Streak: {goalState.currentStreak}</Text>
+            <Text style={styles.goalStatText}>Best: {goalState.bestStreak}</Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Connection</Text>
           <Text style={styles.sectionHint}>Pick API target before running analysis.</Text>
 
@@ -510,11 +594,27 @@ export default function CameraScreen() {
           ]}
         >
           {loading ? (
-            <ActivityIndicator color={palette.actionText} />
+            <View style={styles.loadingButtonContent}>
+              <ActivityIndicator color={palette.actionText} />
+              <Text style={styles.loadingButtonText}>{loadingStage}</Text>
+            </View>
           ) : (
             <Text style={styles.analyzeButtonText}>Analyze Item</Text>
           )}
         </Pressable>
+
+        {loading ? (
+          <View style={styles.skeletonCard}>
+            <Text style={styles.skeletonTitle}>Processing: {loadingStage}</Text>
+            <View style={styles.skeletonLineLg} />
+            <View style={styles.skeletonRow}>
+              <View style={styles.skeletonMetric} />
+              <View style={styles.skeletonMetric} />
+            </View>
+            <View style={styles.skeletonLineMd} />
+            <View style={styles.skeletonLineSm} />
+          </View>
+        ) : null}
 
         {message ? (
           <View style={[styles.noticeCard, styles.infoCard]}>
@@ -837,6 +937,39 @@ function createStyles(palette) {
       borderColor: palette.border,
       gap: 10,
     },
+    goalHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    goalWeekText: {
+      color: palette.textSecondary,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    goalProgressTrack: {
+      height: 10,
+      borderRadius: 999,
+      overflow: 'hidden',
+      backgroundColor: palette.input,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    goalProgressFill: {
+      height: '100%',
+      backgroundColor: '#16A34A',
+    },
+    goalStatsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    goalStatText: {
+      color: palette.textPrimary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
     sectionTitle: {
       color: palette.textPrimary,
       fontSize: 18,
@@ -943,6 +1076,64 @@ function createStyles(palette) {
       color: palette.actionText,
       fontSize: 18,
       fontWeight: '800',
+    },
+    loadingButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    loadingButtonText: {
+      color: palette.actionText,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    skeletonCard: {
+      backgroundColor: palette.card,
+      borderRadius: 14,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: palette.border,
+      gap: 10,
+    },
+    skeletonTitle: {
+      color: palette.textSecondary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    skeletonLineLg: {
+      height: 20,
+      borderRadius: 6,
+      backgroundColor: palette.cardAlt,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    skeletonRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    skeletonMetric: {
+      flex: 1,
+      height: 56,
+      borderRadius: 10,
+      backgroundColor: palette.cardAlt,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    skeletonLineMd: {
+      height: 16,
+      borderRadius: 6,
+      width: '88%',
+      backgroundColor: palette.cardAlt,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    skeletonLineSm: {
+      height: 16,
+      borderRadius: 6,
+      width: '64%',
+      backgroundColor: palette.cardAlt,
+      borderWidth: 1,
+      borderColor: palette.border,
     },
     noticeCard: {
       borderRadius: 10,
