@@ -10,14 +10,10 @@ const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '';
 
-export default function LoginScreen({ themeName = 'dark', setThemeName = () => {}, onLogin = () => {} }) {
-  const palette = THEMES[themeName] ?? THEMES.dark;
-  const styles = useMemo(() => createStyles(palette), [palette]);
-  const [authError, setAuthError] = useState('');
+function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
   const [loadingProfile, setLoadingProfile] = useState(false);
-
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+    webClientId: GOOGLE_WEB_CLIENT_ID,
     iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
     androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
     scopes: ['openid', 'profile', 'email'],
@@ -68,6 +64,36 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
     loadProfile();
   }, [onLogin, response]);
 
+  return (
+    <Pressable
+      disabled={!request || loadingProfile}
+      style={({ pressed }) => [
+        styles.googleButton,
+        (!request || loadingProfile) ? styles.googleButtonDisabled : null,
+        pressed ? styles.googleButtonPressed : null,
+      ]}
+      onPress={() => {
+        setAuthError('');
+        promptAsync();
+      }}
+    >
+      {loadingProfile ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={palette.actionText} />
+          <Text style={styles.googleButtonText}>Signing in...</Text>
+        </View>
+      ) : (
+        <Text style={styles.googleButtonText}>Continue with Google</Text>
+      )}
+    </Pressable>
+  );
+}
+
+export default function LoginScreen({ themeName = 'dark', setThemeName = () => {}, onLogin = () => {} }) {
+  const palette = THEMES[themeName] ?? THEMES.dark;
+  const styles = useMemo(() => createStyles(palette), [palette]);
+  const [authError, setAuthError] = useState('');
+
   const hasGoogleClientIds =
     Boolean(GOOGLE_WEB_CLIENT_ID) || Boolean(GOOGLE_IOS_CLIENT_ID) || Boolean(GOOGLE_ANDROID_CLIENT_ID);
 
@@ -100,27 +126,18 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
             </Pressable>
           </View>
 
-          <Pressable
-            disabled={!request || loadingProfile || !hasGoogleClientIds}
-            style={({ pressed }) => [
-              styles.googleButton,
-              (!request || loadingProfile || !hasGoogleClientIds) ? styles.googleButtonDisabled : null,
-              pressed ? styles.googleButtonPressed : null,
-            ]}
-            onPress={() => {
-              setAuthError('');
-              promptAsync();
-            }}
-          >
-            {loadingProfile ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator color={palette.actionText} />
-                <Text style={styles.googleButtonText}>Signing in...</Text>
-              </View>
-            ) : (
+          {hasGoogleClientIds ? (
+            <GoogleSignInButton
+              styles={styles}
+              palette={palette}
+              onLogin={onLogin}
+              setAuthError={setAuthError}
+            />
+          ) : (
+            <Pressable disabled style={[styles.googleButton, styles.googleButtonDisabled]}>
               <Text style={styles.googleButtonText}>Continue with Google</Text>
-            )}
-          </Pressable>
+            </Pressable>
+          )}
 
           {!hasGoogleClientIds ? (
             <Text style={styles.hint}>
@@ -214,9 +231,7 @@ function createStyles(palette) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    googleButtonDisabled: {
-      opacity: 0.55,
-    },
+    googleButtonDisabled: { opacity: 0.55 },
     googleButtonPressed: {
       opacity: 0.9,
     },
