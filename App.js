@@ -3,7 +3,9 @@ import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import CameraScreen from './src/screens/CameraScreen.jsx';
 import GoalsScreen from './src/screens/GoalsScreen.jsx';
+import HomeScreen from './src/screens/HomeScreen.jsx';
 import HistoryScreen from './src/screens/HistoryScreen.jsx';
+import MetaScreen from './src/screens/MetaScreen.jsx';
 import { DEV_API_BASE_URL, PROD_API_BASE_URL } from './src/config';
 import { THEMES } from './src/theme';
 
@@ -17,13 +19,15 @@ function getWeekKey(date = new Date()) {
 }
 
 const TABS = [
+  { key: 'home', label: 'Home' },
   { key: 'scan', label: 'Scan' },
-  { key: 'history', label: 'History' },
+  { key: 'history', label: 'Logs' },
   { key: 'goals', label: 'Goals' },
+  { key: 'meta', label: 'Meta' },
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('scan');
+  const [activeTab, setActiveTab] = useState('home');
   const [scanHistory, setScanHistory] = useState([]);
   const [historyStats, setHistoryStats] = useState({ avgScore: null, highImpactCount: 0, greenerCount: 0 });
   const [goalState, setGoalState] = useState({
@@ -72,6 +76,7 @@ export default function App() {
     <SafeAreaView style={styles.appRoot}>
       <StatusBar style={palette.statusBarStyle} backgroundColor={palette.page} />
       <View style={styles.screenWrap}>
+        {activeTab === 'home' ? <HomeScreen themeName={themeName} /> : null}
         {activeTab === 'scan' ? (
           <CameraScreen
             setScanHistory={setScanHistory}
@@ -91,6 +96,7 @@ export default function App() {
           <HistoryScreen scanHistory={scanHistory} stats={historyStats} themeName={themeName} />
         ) : null}
         {activeTab === 'goals' ? <GoalsScreen goalState={goalState} themeName={themeName} /> : null}
+        {activeTab === 'meta' ? <MetaScreen themeName={themeName} /> : null}
       </View>
 
       <View style={styles.tabBarWrap}>
@@ -133,8 +139,8 @@ function createStyles(palette) {
     tabBar: {
       flexDirection: 'row',
       gap: 6,
-      width: '88%',
-      maxWidth: 420,
+      width: '94%',
+      maxWidth: 520,
       paddingHorizontal: 6,
       paddingVertical: 6,
       borderWidth: 1,
