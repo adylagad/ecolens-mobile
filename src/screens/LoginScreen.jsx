@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { THEMES } from '../theme';
@@ -12,20 +13,21 @@ const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_I
 const EXPO_PROXY_PROJECT = '@adylagad/ecolens-mobile';
 
 function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
+  const isExpoGo = Constants.appOwnership === 'expo';
+  const googleConfig = isExpoGo
+    ? {
+        expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+        scopes: ['openid', 'profile', 'email'],
+      }
+    : {
+        webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+        iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+        androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
+        scopes: ['openid', 'profile', 'email'],
+      };
+
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [request, response, promptAsync] = Google.useAuthRequest(
-    {
-      expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-      webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-      iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-      androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
-      scopes: ['openid', 'profile', 'email'],
-    },
-    {
-      useProxy: true,
-      projectNameForProxy: EXPO_PROXY_PROJECT,
-    }
-  );
+  const [request, response, promptAsync] = Google.useAuthRequest(googleConfig);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -82,7 +84,11 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
       ]}
       onPress={() => {
         setAuthError('');
-        promptAsync({ useProxy: true, projectNameForProxy: EXPO_PROXY_PROJECT });
+        if (isExpoGo) {
+          promptAsync({ useProxy: true, projectNameForProxy: EXPO_PROXY_PROJECT });
+        } else {
+          promptAsync();
+        }
       }}
     >
       {loadingProfile ? (
