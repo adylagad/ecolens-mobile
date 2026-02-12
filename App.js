@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import CameraScreen from './src/screens/CameraScreen.jsx';
 import GoalsScreen from './src/screens/GoalsScreen.jsx';
 import HomeScreen from './src/screens/HomeScreen.jsx';

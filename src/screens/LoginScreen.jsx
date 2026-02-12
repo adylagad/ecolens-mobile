@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEMES } from '../theme';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -111,7 +112,18 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
 
   const hasGoogleClientIds = isExpoGo
     ? Boolean(GOOGLE_WEB_CLIENT_ID)
-    : Boolean(GOOGLE_WEB_CLIENT_ID) || Boolean(GOOGLE_IOS_CLIENT_ID) || Boolean(GOOGLE_ANDROID_CLIENT_ID);
+    : Platform.OS === 'ios'
+      ? Boolean(GOOGLE_IOS_CLIENT_ID)
+      : Platform.OS === 'android'
+        ? Boolean(GOOGLE_ANDROID_CLIENT_ID)
+        : Boolean(GOOGLE_WEB_CLIENT_ID);
+  const missingClientIdHint = isExpoGo
+    ? 'Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for Expo Go.'
+    : Platform.OS === 'ios'
+      ? 'Set EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID for iOS.'
+      : Platform.OS === 'android'
+        ? 'Set EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID for Android.'
+        : 'Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID for web.';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -150,9 +162,12 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
               setAuthError={setAuthError}
             />
           ) : (
-            <Pressable disabled style={[styles.googleButton, styles.googleButtonDisabled]}>
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
-            </Pressable>
+            <>
+              <Pressable disabled style={[styles.googleButton, styles.googleButtonDisabled]}>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </Pressable>
+              <Text style={styles.hint}>{missingClientIdHint}</Text>
+            </>
           )}
 
           {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
@@ -259,6 +274,11 @@ function createStyles(palette) {
     errorText: {
       color: '#B91C1C',
       fontSize: 13,
+      lineHeight: 18,
+    },
+    hint: {
+      color: palette.textSecondary,
+      fontSize: 12,
       lineHeight: 18,
     },
   });
