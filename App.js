@@ -33,6 +33,12 @@ const DEFAULT_HISTORY_THRESHOLDS = {
   greenerThreshold: 85,
 };
 const TOAST_DURATION_MS = 3000;
+const EMPTY_HISTORY_STATS = {
+  avgScore: null,
+  highImpactCount: 0,
+  greenerCount: 0,
+  ...DEFAULT_HISTORY_THRESHOLDS,
+};
 
 function resolveUserId(authUser) {
   if (!authUser) {
@@ -53,12 +59,7 @@ function resolveUserId(authUser) {
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [scanHistory, setScanHistory] = useState([]);
-  const [historyStats, setHistoryStats] = useState({
-    avgScore: null,
-    highImpactCount: 0,
-    greenerCount: 0,
-    ...DEFAULT_HISTORY_THRESHOLDS,
-  });
+  const [historyStats, setHistoryStats] = useState(EMPTY_HISTORY_STATS);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [goalState, setGoalState] = useState({
@@ -155,7 +156,16 @@ export default function App() {
         const historyData = await historyResponse.json();
         setScanHistory(Array.isArray(historyData) ? historyData : []);
       } else {
-        throw new Error(`History request failed (${historyResponse.status})`);
+        let backendMessage = '';
+        try {
+          const errorBody = await historyResponse.json();
+          backendMessage = String(errorBody?.message ?? '').trim();
+        } catch (parseError) {
+          backendMessage = '';
+        }
+        throw new Error(
+          backendMessage || `History request failed (${historyResponse.status})`
+        );
       }
 
       try {
@@ -190,8 +200,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadHistory();
+    if (!userId) {
+      setScanHistory([]);
+      setHistoryStats(EMPTY_HISTORY_STATS);
+      return;
+    }
+    // Keep history scoped to the selected backend mode (prod/dev) and user.
+    setScanHistory([]);
+    setHistoryStats(EMPTY_HISTORY_STATS);
   }, [apiBaseUrl, userId]);
+
+  useEffect(() => {
+    if (activeTab !== 'history' || !userId) {
+      return;
+    }
+    loadHistory();
+  }, [activeTab, apiBaseUrl, userId]);
 
   return (
     <SafeAreaView style={styles.appRoot}>
