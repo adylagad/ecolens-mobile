@@ -1,8 +1,12 @@
+import { useMemo } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { THEMES } from '../theme';
 
 const GOAL_TARGET = 5;
 
-export default function GoalsScreen({ goalState }) {
+export default function GoalsScreen({ goalState, themeName = 'dark' }) {
+  const palette = THEMES[themeName] ?? THEMES.dark;
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const safeGoalState =
     goalState ||
     ({
@@ -55,40 +59,41 @@ export default function GoalsScreen({ goalState }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#07111F',
-  },
+function createStyles(palette) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: palette.page,
+    },
   container: {
     padding: 16,
     gap: 12,
     paddingBottom: 24,
   },
   card: {
-    backgroundColor: '#0F172A',
+    backgroundColor: palette.card,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#25324A',
+    borderColor: palette.border,
     padding: 14,
     gap: 10,
   },
   title: {
-    color: '#F8FAFC',
+    color: palette.textPrimary,
     fontSize: 20,
     fontWeight: '800',
   },
   subtitle: {
-    color: '#F8FAFC',
+    color: palette.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
   hint: {
-    color: '#94A3B8',
+    color: palette.textSecondary,
     fontSize: 12,
   },
   goalText: {
-    color: '#E2E8F0',
+    color: palette.textPrimary,
     fontSize: 14,
   },
   progressTrack: {
@@ -96,8 +101,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#25324A',
-    backgroundColor: '#0A1425',
+    borderColor: palette.border,
+    backgroundColor: palette.input,
   },
   progressFill: {
     height: '100%',
@@ -110,24 +115,25 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#25324A',
-    backgroundColor: '#131F34',
+    borderColor: palette.border,
+    backgroundColor: palette.cardAlt,
     borderRadius: 10,
     padding: 10,
     gap: 2,
   },
   metricLabel: {
-    color: '#94A3B8',
+    color: palette.textSecondary,
     fontSize: 11,
   },
   metricValue: {
-    color: '#F8FAFC',
+    color: palette.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
   tip: {
-    color: '#CBD5E1',
+    color: palette.textPrimary,
     fontSize: 13,
     lineHeight: 18,
   },
-});
+  });
+}

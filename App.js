@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import CameraScreen from './src/screens/CameraScreen.jsx';
 import GoalsScreen from './src/screens/GoalsScreen.jsx';
 import HistoryScreen from './src/screens/HistoryScreen.jsx';
 import { DEV_API_BASE_URL, PROD_API_BASE_URL } from './src/config';
+import { THEMES } from './src/theme';
 
 function getWeekKey(date = new Date()) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -32,7 +34,10 @@ export default function App() {
   });
   const [apiMode, setApiMode] = useState('production');
   const [devBaseUrl, setDevBaseUrl] = useState(DEV_API_BASE_URL);
+  const [themeName, setThemeName] = useState('dark');
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
+  const palette = THEMES[themeName] ?? THEMES.dark;
+  const styles = createStyles(palette);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -65,6 +70,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.appRoot}>
+      <StatusBar style={palette.statusBarStyle} backgroundColor={palette.page} />
       <View style={styles.screenWrap}>
         {activeTab === 'scan' ? (
           <CameraScreen
@@ -77,13 +83,18 @@ export default function App() {
             devBaseUrl={devBaseUrl}
             setDevBaseUrl={setDevBaseUrl}
             apiBaseUrl={apiBaseUrl}
+            themeName={themeName}
+            setThemeName={setThemeName}
           />
         ) : null}
-        {activeTab === 'history' ? <HistoryScreen scanHistory={scanHistory} stats={historyStats} /> : null}
-        {activeTab === 'goals' ? <GoalsScreen goalState={goalState} /> : null}
+        {activeTab === 'history' ? (
+          <HistoryScreen scanHistory={scanHistory} stats={historyStats} themeName={themeName} />
+        ) : null}
+        {activeTab === 'goals' ? <GoalsScreen goalState={goalState} themeName={themeName} /> : null}
       </View>
 
-      <View style={styles.tabBar}>
+      <View style={styles.tabBarWrap}>
+        <View style={styles.tabBar}>
         {TABS.map((tab) => (
           <Pressable
             key={tab.key}
@@ -95,49 +106,71 @@ export default function App() {
             </Text>
           </Pressable>
         ))}
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  appRoot: {
-    flex: 1,
-    backgroundColor: '#07111F',
-  },
-  screenWrap: {
-    flex: 1,
-  },
-  tabBar: {
+function createStyles(palette) {
+  return StyleSheet.create({
+    appRoot: {
+      flex: 1,
+      backgroundColor: palette.page,
+    },
+    screenWrap: {
+      flex: 1,
+      paddingBottom: 110,
+      backgroundColor: palette.page,
+    },
+    tabBarWrap: {
+      position: 'absolute',
+      left: 14,
+      right: 14,
+      bottom: 14,
+      alignItems: 'center',
+    },
+    tabBar: {
     flexDirection: 'row',
     gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 18,
+    width: '100%',
+    maxWidth: 520,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#25324A',
-    backgroundColor: '#0B1221',
-    minHeight: 74,
-  },
-  tabButton: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 10,
+    borderTopColor: palette.glassBorder,
     borderWidth: 1,
-    borderColor: '#25324A',
-    backgroundColor: '#0A1425',
+    borderColor: palette.glassBorder,
+    backgroundColor: palette.glassBg,
+    minHeight: 68,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+    },
+    tabButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tabButtonActive: {
-    backgroundColor: '#0EA5E9',
-    borderColor: '#0EA5E9',
-  },
-  tabText: {
-    color: '#94A3B8',
+    },
+    tabButtonActive: {
+      backgroundColor: palette.tabActiveBg,
+      borderColor: palette.glassBorder,
+    },
+    tabText: {
+    color: palette.tabText,
     fontWeight: '700',
-  },
-  tabTextActive: {
-    color: '#082F49',
-  },
-});
+    fontSize: 14,
+    },
+    tabTextActive: {
+      color: palette.tabTextActive,
+    },
+  });
+}

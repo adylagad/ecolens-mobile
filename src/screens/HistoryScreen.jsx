@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { THEMES } from '../theme';
 
-export default function HistoryScreen({ scanHistory = [], stats = null }) {
+export default function HistoryScreen({ scanHistory = [], stats = null, themeName = 'dark' }) {
   const [highImpactOnly, setHighImpactOnly] = useState(false);
+  const palette = THEMES[themeName] ?? THEMES.dark;
+  const styles = useMemo(() => createStyles(palette), [palette]);
 
   const visibleHistory = useMemo(
     () => (highImpactOnly ? scanHistory.filter((entry) => entry.ecoScore < 40) : scanHistory),
@@ -86,24 +89,25 @@ export default function HistoryScreen({ scanHistory = [], stats = null }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#07111F',
-  },
-  container: {
-    padding: 16,
-    gap: 12,
-    paddingBottom: 24,
-  },
-  card: {
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#25324A',
-    padding: 14,
-    gap: 10,
-  },
+function createStyles(palette) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: palette.page,
+    },
+    container: {
+      padding: 16,
+      gap: 12,
+      paddingBottom: 24,
+    },
+    card: {
+      backgroundColor: palette.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: palette.border,
+      padding: 14,
+      gap: 10,
+    },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -111,18 +115,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   title: {
-    color: '#F8FAFC',
+    color: palette.textPrimary,
     fontSize: 18,
     fontWeight: '800',
   },
   hint: {
-    color: '#94A3B8',
+    color: palette.textSecondary,
     fontSize: 13,
   },
   filterPill: {
     borderWidth: 1,
-    borderColor: '#25324A',
-    backgroundColor: '#0A1425',
+    borderColor: palette.border,
+    backgroundColor: palette.input,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -134,7 +138,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
   },
   filterPillText: {
-    color: '#94A3B8',
+    color: palette.textSecondary,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -148,23 +152,23 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#25324A',
-    backgroundColor: '#131F34',
+    borderColor: palette.border,
+    backgroundColor: palette.cardAlt,
     borderRadius: 10,
     padding: 10,
     gap: 2,
   },
   statLabel: {
-    color: '#94A3B8',
+    color: palette.textSecondary,
     fontSize: 11,
   },
   statValue: {
-    color: '#F8FAFC',
+    color: palette.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
   emptyText: {
-    color: '#94A3B8',
+    color: palette.textSecondary,
     fontSize: 13,
   },
   list: {
@@ -172,8 +176,8 @@ const styles = StyleSheet.create({
   },
   item: {
     borderWidth: 1,
-    borderColor: '#25324A',
-    backgroundColor: '#131F34',
+    borderColor: palette.border,
+    backgroundColor: palette.cardAlt,
     borderRadius: 10,
     padding: 10,
     gap: 4,
@@ -185,17 +189,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   itemTitle: {
-    color: '#F8FAFC',
+    color: palette.textPrimary,
     fontWeight: '700',
     flex: 1,
   },
   itemScore: {
-    color: '#F8FAFC',
+    color: palette.textPrimary,
     fontWeight: '800',
     fontSize: 12,
   },
   itemMeta: {
-    color: '#94A3B8',
+    color: palette.textSecondary,
     fontSize: 12,
   },
-});
+  });
+}

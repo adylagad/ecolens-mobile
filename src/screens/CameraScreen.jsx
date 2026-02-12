@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import CameraProvider from '../clients/CameraProvider';
 import { TEST_IMAGE_BASE64 } from '../config/testImageBase64';
+import { THEMES } from '../theme';
 
 const LABEL_OPTIONS = [
   { label: 'Auto-detect from camera', value: '' },
@@ -22,47 +23,6 @@ const LABEL_OPTIONS = [
   { label: 'Paper Coffee Cup', value: 'Paper Coffee Cup' },
   { label: 'LED Light Bulb', value: 'LED Light Bulb' },
 ];
-
-const THEMES = {
-  dark: {
-    page: '#07111F',
-    card: '#0F172A',
-    cardAlt: '#131F34',
-    border: '#25324A',
-    textPrimary: '#F8FAFC',
-    textSecondary: '#94A3B8',
-    action: '#16A34A',
-    actionText: '#F8FAFC',
-    input: '#0A1425',
-    modalBackdrop: 'rgba(2, 6, 23, 0.7)',
-    modeActiveBg: '#0EA5E9',
-    modeActiveText: '#082F49',
-    modeText: '#E2E8F0',
-    noticeInfoBg: '#0C4A6E',
-    noticeInfoBorder: '#0369A1',
-    noticeErrorBg: '#7F1D1D',
-    noticeErrorBorder: '#B91C1C',
-  },
-  light: {
-    page: '#F1F5F9',
-    card: '#FFFFFF',
-    cardAlt: '#F8FAFC',
-    border: '#CBD5E1',
-    textPrimary: '#0F172A',
-    textSecondary: '#1E293B',
-    action: '#16A34A',
-    actionText: '#F8FAFC',
-    input: '#FFFFFF',
-    modalBackdrop: 'rgba(15, 23, 42, 0.35)',
-    modeActiveBg: '#0EA5E9',
-    modeActiveText: '#082F49',
-    modeText: '#0F172A',
-    noticeInfoBg: '#E0F2FE',
-    noticeInfoBorder: '#7DD3FC',
-    noticeErrorBg: '#FEE2E2',
-    noticeErrorBorder: '#FCA5A5',
-  },
-};
 
 function getScoreTone(score) {
   if (typeof score !== 'number') {
@@ -235,13 +195,14 @@ export default function CameraScreen({
   devBaseUrl = '',
   setDevBaseUrl = () => {},
   apiBaseUrl = '',
+  themeName = 'dark',
+  setThemeName = () => {},
 }) {
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
   const resultCardYRef = useRef(0);
   const resultAnim = useRef(new Animated.Value(0)).current;
 
-  const [themeName, setThemeName] = useState('dark');
   const [selectedLabel, setSelectedLabel] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -252,7 +213,7 @@ export default function CameraScreen({
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [queuedRequests, setQueuedRequests] = useState([]);
 
-  const palette = THEMES[themeName];
+  const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
   const selectedLabelText =
     LABEL_OPTIONS.find((option) => option.value === selectedLabel)?.label || LABEL_OPTIONS[0].label;
