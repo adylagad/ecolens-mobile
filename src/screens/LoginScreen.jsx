@@ -139,11 +139,6 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
             </Pressable>
           )}
 
-          {!hasGoogleClientIds ? (
-            <Text style={styles.hint}>
-              Add `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (and optionally iOS/Android IDs) to enable Google sign-in.
-            </Text>
-          ) : null}
           {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
         </View>
       </View>
@@ -244,11 +239,6 @@ function createStyles(palette) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-    },
-    hint: {
-      color: palette.textSecondary,
-      fontSize: 12,
-      lineHeight: 18,
     },
     errorText: {
       color: '#B91C1C',
