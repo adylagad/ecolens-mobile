@@ -104,6 +104,7 @@ export default function App() {
             <Text style={[styles.tabText, activeTab === tab.key ? styles.tabTextActive : null]}>
               {tab.label}
             </Text>
+            {activeTab === tab.key ? <View style={styles.tabActiveDot} /> : null}
           </Pressable>
         ))}
         </View>
@@ -120,43 +121,45 @@ function createStyles(palette) {
     },
     screenWrap: {
       flex: 1,
-      paddingBottom: 94,
+      paddingBottom: 72,
       backgroundColor: palette.page,
     },
     tabBarWrap: {
       position: 'absolute',
       left: 14,
       right: 14,
-      bottom: 10,
+      bottom: 8,
       alignItems: 'center',
     },
     tabBar: {
       flexDirection: 'row',
-      gap: 8,
-      width: '92%',
-      maxWidth: 470,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+      gap: 6,
+      width: '88%',
+      maxWidth: 420,
+      paddingHorizontal: 6,
+      paddingVertical: 6,
       borderWidth: 1,
       borderColor: palette.glassBorder,
       backgroundColor: palette.glassBg,
-      minHeight: 62,
-      borderRadius: 22,
+      minHeight: 56,
+      borderRadius: 18,
       shadowColor: '#000',
-      shadowOpacity: 0.12,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 5 },
-      elevation: 6,
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 4,
     },
     tabButton: {
       flex: 1,
-      minHeight: 44,
+      minHeight: 42,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: 'transparent',
       backgroundColor: 'transparent',
       alignItems: 'center',
       justifyContent: 'center',
+      paddingVertical: 4,
+      gap: 2,
     },
     tabButtonActive: {
       backgroundColor: palette.tabActiveBg,
@@ -165,10 +168,17 @@ function createStyles(palette) {
     tabText: {
       color: palette.tabText,
       fontWeight: '700',
-      fontSize: 13,
+      fontSize: 12,
+      letterSpacing: 0.2,
     },
     tabTextActive: {
       color: palette.tabTextActive,
+    },
+    tabActiveDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 999,
+      backgroundColor: palette.tabTextActive,
     },
   });
 }
