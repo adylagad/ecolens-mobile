@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import CameraScreen from './src/screens/CameraScreen.jsx';
 import GoalsScreen from './src/screens/GoalsScreen.jsx';
 import HomeScreen from './src/screens/HomeScreen.jsx';
@@ -71,12 +71,14 @@ export default function App() {
   const [devBaseUrl, setDevBaseUrl] = useState(DEV_API_BASE_URL);
   const [authUser, setAuthUser] = useState(null);
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
   const themeName = colorScheme === 'light' ? 'light' : 'dark';
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const userId = resolveUserId(authUser);
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = createStyles(palette, themeName);
   const toastTimerRef = useRef(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
 
   const showToast = (message, type = 'info') => {
     const text = String(message ?? '').trim();
@@ -86,12 +88,47 @@ export default function App() {
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
     }
+    toastAnim.stopAnimation();
+    toastAnim.setValue(0);
     setToast({ message: text, type, id: Date.now() });
+  };
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    Animated.spring(toastAnim, {
+      toValue: 1,
+      damping: 18,
+      stiffness: 250,
+      mass: 0.8,
+      useNativeDriver: true,
+    }).start();
+
+    const toastId = toast.id;
     toastTimerRef.current = setTimeout(() => {
-      setToast(null);
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (!finished) {
+          return;
+        }
+        setToast((current) => (current && current.id === toastId ? null : current));
+      });
       toastTimerRef.current = null;
     }, TOAST_DURATION_MS);
-  };
+
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
+      }
+    };
+  }, [toast, toastAnim]);
 
   useEffect(() => {
     return () => {
@@ -160,8 +197,8 @@ export default function App() {
     <SafeAreaView style={styles.appRoot}>
       <StatusBar style={palette.statusBarStyle} backgroundColor={palette.page} />
       {toast ? (
-        <View pointerEvents="none" style={styles.toastWrap}>
-          <View
+        <View pointerEvents="none" style={[styles.toastWrap, { top: Math.max(insets.top + 8, 14) }]}>
+          <Animated.View
             style={[
               styles.toastCard,
               toast.type === 'error'
@@ -169,10 +206,27 @@ export default function App() {
                 : toast.type === 'success'
                   ? styles.toastSuccess
                   : styles.toastInfo,
+              {
+                opacity: toastAnim,
+                transform: [
+                  {
+                    translateY: toastAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-16, 0],
+                    }),
+                  },
+                  {
+                    scale: toastAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.98, 1],
+                    }),
+                  },
+                ],
+              },
             ]}
           >
             <Text style={styles.toastText}>{toast.message}</Text>
-          </View>
+          </Animated.View>
         </View>
       ) : null}
       {!authUser ? (
@@ -246,10 +300,10 @@ function createStyles(palette, themeName) {
     },
     toastWrap: {
       position: 'absolute',
-      top: 14,
       left: 12,
       right: 12,
       zIndex: 50,
+      elevation: 10,
       alignItems: 'center',
     },
     toastCard: {
