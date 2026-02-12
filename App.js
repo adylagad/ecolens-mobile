@@ -10,6 +10,7 @@ import LoginScreen from './src/screens/LoginScreen.jsx';
 import MetaScreen from './src/screens/MetaScreen.jsx';
 import { DEV_API_BASE_URL, PROD_API_BASE_URL } from './src/config';
 import { THEMES } from './src/theme';
+import { buildApiUrl } from './src/utils/apiUrl';
 
 function getWeekKey(date = new Date()) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -85,10 +86,9 @@ export default function App() {
     setHistoryLoadError('');
     try {
       const userQuery = `userId=${encodeURIComponent(userId)}`;
-      const [historyResponse, statsResponse] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/history?${userQuery}`),
-        fetch(`${apiBaseUrl}/api/history/stats?${userQuery}`),
-      ]);
+      const historyUrl = `${buildApiUrl(apiBaseUrl, '/api/history')}?${userQuery}`;
+      const statsUrl = `${buildApiUrl(apiBaseUrl, '/api/history/stats')}?${userQuery}`;
+      const historyResponse = await fetch(historyUrl);
 
       if (historyResponse.ok) {
         const historyData = await historyResponse.json();
@@ -97,28 +97,29 @@ export default function App() {
         throw new Error(`History request failed (${historyResponse.status})`);
       }
 
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setHistoryStats({
-          avgScore: statsData?.avgScore ?? null,
-          highImpactCount: statsData?.highImpactCount ?? 0,
-          greenerCount: statsData?.greenerCount ?? 0,
-          highImpactThreshold:
-            typeof statsData?.highImpactThreshold === 'number'
-              ? statsData.highImpactThreshold
-              : DEFAULT_HISTORY_THRESHOLDS.highImpactThreshold,
-          greenerThreshold:
-            typeof statsData?.greenerThreshold === 'number'
-              ? statsData.greenerThreshold
-              : DEFAULT_HISTORY_THRESHOLDS.greenerThreshold,
-        });
-      } else {
-        throw new Error(`Stats request failed (${statsResponse.status})`);
+      try {
+        const statsResponse = await fetch(statsUrl);
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          setHistoryStats({
+            avgScore: statsData?.avgScore ?? null,
+            highImpactCount: statsData?.highImpactCount ?? 0,
+            greenerCount: statsData?.greenerCount ?? 0,
+            highImpactThreshold:
+              typeof statsData?.highImpactThreshold === 'number'
+                ? statsData.highImpactThreshold
+                : DEFAULT_HISTORY_THRESHOLDS.highImpactThreshold,
+            greenerThreshold:
+              typeof statsData?.greenerThreshold === 'number'
+                ? statsData.greenerThreshold
+                : DEFAULT_HISTORY_THRESHOLDS.greenerThreshold,
+          });
+        }
+      } catch (statsError) {
+        // Keep history usable even if stats endpoint is unavailable.
       }
     } catch (error) {
-      setHistoryLoadError(
-        error?.message ? `Could not load history: ${error.message}` : 'Could not load history right now.'
-      );
+      setHistoryLoadError('');
     } finally {
       setHistoryLoading(false);
     }

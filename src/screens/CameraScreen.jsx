@@ -15,6 +15,7 @@ import {
 import CameraProvider from '../clients/CameraProvider';
 import { TEST_IMAGE_BASE64 } from '../config/testImageBase64';
 import { THEMES } from '../theme';
+import { buildApiUrl } from '../utils/apiUrl';
 
 const LABEL_OPTIONS = [
   { label: 'Auto-detect from camera', value: '' },
@@ -313,7 +314,7 @@ export default function CameraScreen({
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
   const executeRecognition = async (payload) => {
-    const response = await fetch(`${apiBaseUrl}/api/recognize`, {
+    const response = await fetch(buildApiUrl(apiBaseUrl, '/api/recognize'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -507,7 +508,7 @@ export default function CameraScreen({
 
     try {
       const userQuery = `userId=${encodeURIComponent(requestBody.userId)}`;
-      const response = await fetch(`${apiBaseUrl}/api/history?${userQuery}`, {
+      const response = await fetch(`${buildApiUrl(apiBaseUrl, '/api/history')}?${userQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -540,7 +541,7 @@ export default function CameraScreen({
       setScanHistory((prev) => [normalizedEntry, ...prev].slice(0, 40));
 
       try {
-        const statsResponse = await fetch(`${apiBaseUrl}/api/history/stats?${userQuery}`);
+        const statsResponse = await fetch(`${buildApiUrl(apiBaseUrl, '/api/history/stats')}?${userQuery}`);
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           setHistoryStats((prev) => ({
@@ -591,7 +592,7 @@ export default function CameraScreen({
         return nextHistory;
       });
       setMessage('Saved locally. Backend history was unavailable.');
-      setError(saveError.message ? `History sync failed: ${saveError.message}` : 'History sync failed.');
+      setError('');
     }
   };
 
