@@ -107,9 +107,11 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
   const [authError, setAuthError] = useState('');
+  const isExpoGo = Constants.appOwnership === 'expo';
 
-  const hasGoogleClientIds =
-    Boolean(GOOGLE_WEB_CLIENT_ID) || Boolean(GOOGLE_IOS_CLIENT_ID) || Boolean(GOOGLE_ANDROID_CLIENT_ID);
+  const hasGoogleClientIds = isExpoGo
+    ? Boolean(GOOGLE_WEB_CLIENT_ID)
+    : Boolean(GOOGLE_WEB_CLIENT_ID) || Boolean(GOOGLE_IOS_CLIENT_ID) || Boolean(GOOGLE_ANDROID_CLIENT_ID);
 
   return (
     <SafeAreaView style={styles.safeArea}>
