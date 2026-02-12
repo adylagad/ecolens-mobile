@@ -25,33 +25,53 @@ const LABEL_OPTIONS = [
   { label: 'LED Light Bulb', value: 'LED Light Bulb' },
 ];
 
-function getScoreTone(score) {
+function getScoreTone(score, themeName = 'dark') {
+  const isLight = themeName === 'light';
   if (typeof score !== 'number') {
-    return { bg: '#334155', text: '#E2E8F0', label: 'N/A' };
+    return isLight
+      ? { bg: '#E2E8F0', text: '#334155', border: '#CBD5E1', label: 'N/A' }
+      : { bg: 'rgba(148, 163, 184, 0.16)', text: '#E2E8F0', border: 'rgba(148, 163, 184, 0.35)', label: 'N/A' };
   }
   if (score >= 85) {
-    return { bg: '#14532D', text: '#DCFCE7', label: 'Excellent' };
+    return isLight
+      ? { bg: '#DCFCE7', text: '#166534', border: '#86EFAC', label: 'Excellent' }
+      : { bg: 'rgba(34, 197, 94, 0.16)', text: '#BBF7D0', border: 'rgba(74, 222, 128, 0.34)', label: 'Excellent' };
   }
   if (score >= 60) {
-    return { bg: '#365314', text: '#ECFCCB', label: 'Good' };
+    return isLight
+      ? { bg: '#ECFCCB', text: '#3F6212', border: '#BEF264', label: 'Good' }
+      : { bg: 'rgba(132, 204, 22, 0.16)', text: '#D9F99D', border: 'rgba(163, 230, 53, 0.34)', label: 'Good' };
   }
   if (score >= 40) {
-    return { bg: '#78350F', text: '#FEF3C7', label: 'Fair' };
+    return isLight
+      ? { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D', label: 'Fair' }
+      : { bg: 'rgba(245, 158, 11, 0.14)', text: '#FCD34D', border: 'rgba(251, 191, 36, 0.32)', label: 'Fair' };
   }
-  return { bg: '#7F1D1D', text: '#FEE2E2', label: 'High Impact' };
+  return isLight
+    ? { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5', label: 'High Impact' }
+    : { bg: 'rgba(239, 68, 68, 0.16)', text: '#FCA5A5', border: 'rgba(248, 113, 113, 0.34)', label: 'High Impact' };
 }
 
-function getConfidenceTone(confidence) {
+function getConfidenceTone(confidence, themeName = 'dark') {
+  const isLight = themeName === 'light';
   if (typeof confidence !== 'number') {
-    return { bg: '#334155', text: '#E2E8F0', label: 'Unknown' };
+    return isLight
+      ? { bg: '#E2E8F0', text: '#334155', border: '#CBD5E1', label: 'Unknown' }
+      : { bg: 'rgba(148, 163, 184, 0.16)', text: '#E2E8F0', border: 'rgba(148, 163, 184, 0.35)', label: 'Unknown' };
   }
   if (confidence >= 0.8) {
-    return { bg: '#14532D', text: '#DCFCE7', label: 'Confidence: High' };
+    return isLight
+      ? { bg: '#DBEAFE', text: '#1D4ED8', border: '#93C5FD', label: 'Confidence: High' }
+      : { bg: 'rgba(59, 130, 246, 0.18)', text: '#BFDBFE', border: 'rgba(96, 165, 250, 0.36)', label: 'Confidence: High' };
   }
   if (confidence >= 0.6) {
-    return { bg: '#78350F', text: '#FEF3C7', label: 'Confidence: Medium' };
+    return isLight
+      ? { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D', label: 'Confidence: Medium' }
+      : { bg: 'rgba(245, 158, 11, 0.14)', text: '#FCD34D', border: 'rgba(251, 191, 36, 0.32)', label: 'Confidence: Medium' };
   }
-  return { bg: '#7F1D1D', text: '#FEE2E2', label: 'Confidence: Low' };
+  return isLight
+    ? { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5', label: 'Confidence: Low' }
+    : { bg: 'rgba(239, 68, 68, 0.16)', text: '#FCA5A5', border: 'rgba(248, 113, 113, 0.34)', label: 'Confidence: Low' };
 }
 
 const GOAL_TARGET = 5;
@@ -442,8 +462,8 @@ export default function CameraScreen({
     }
   };
 
-  const scoreTone = getScoreTone(result?.ecoScore);
-  const confidenceTone = getConfidenceTone(result?.confidence);
+  const scoreTone = getScoreTone(result?.ecoScore, themeName);
+  const confidenceTone = getConfidenceTone(result?.confidence, themeName);
   const catalogCoveragePct =
     typeof result?.catalogCoverage === 'number' && Number.isFinite(result.catalogCoverage)
       ? Math.round(result.catalogCoverage * 100)
@@ -806,12 +826,22 @@ export default function CameraScreen({
             <View style={styles.resultHeader}>
               <Text style={styles.resultTitle}>{result.title || result.name || 'Result'}</Text>
               <View style={styles.badgeColumn}>
-                <View style={[styles.scoreBadge, { backgroundColor: scoreTone.bg }]}>
+                <View
+                  style={[
+                    styles.scoreBadge,
+                    { backgroundColor: scoreTone.bg, borderColor: scoreTone.border },
+                  ]}
+                >
                   <Text style={[styles.scoreBadgeText, { color: scoreTone.text }]}>
                     {scoreTone.label}
                   </Text>
                 </View>
-                <View style={[styles.scoreBadge, { backgroundColor: confidenceTone.bg }]}>
+                <View
+                  style={[
+                    styles.scoreBadge,
+                    { backgroundColor: confidenceTone.bg, borderColor: confidenceTone.border },
+                  ]}
+                >
                   <Text style={[styles.scoreBadgeText, { color: confidenceTone.text }]}>
                     {confidenceTone.label}
                   </Text>
@@ -1293,6 +1323,7 @@ function createStyles(palette) {
       borderRadius: 999,
       paddingHorizontal: 10,
       paddingVertical: 5,
+      borderWidth: 1,
     },
     scoreBadgeText: {
       fontSize: 11,
