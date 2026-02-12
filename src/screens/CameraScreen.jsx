@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AccessibilityInfo,
   Animated,
   Modal,
   Pressable,
@@ -47,9 +48,9 @@ const THEMES = {
     page: '#F1F5F9',
     card: '#FFFFFF',
     cardAlt: '#F8FAFC',
-    border: '#D1D5DB',
+    border: '#94A3B8',
     textPrimary: '#0F172A',
-    textSecondary: '#475569',
+    textSecondary: '#1E293B',
     action: '#16A34A',
     actionText: '#F8FAFC',
     input: '#FFFFFF',
@@ -244,6 +245,7 @@ export default function CameraScreen() {
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [scanHistory, setScanHistory] = useState([]);
   const [highImpactOnly, setHighImpactOnly] = useState(false);
+  const [queuedRequests, setQueuedRequests] = useState([]);
   const [goalState, setGoalState] = useState({
     weekKey: getWeekKey(),
     avoidedSingleUseCount: 0,
@@ -296,17 +298,42 @@ export default function CameraScreen() {
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
+  const executeRecognition = async (payload) => {
+    const response = await fetch(`${apiBaseUrl}/api/recognize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      data = null;
+    }
+
+    if (!response.ok) {
+      const error = new Error(data?.message || `Request failed (${response.status})`);
+      error.code = response.status;
+      throw error;
+    }
+    return data;
+  };
+
   const handleAnalyze = async (manualOverrideLabel = null) => {
     setLoading(true);
     setError('');
     setMessage('');
     setResult(null);
 
+    let payload = {
+      detectedLabel: '',
+      confidence: 0.9,
+    };
+
     try {
-      const payload = {
-        detectedLabel: '',
-        confidence: 0.9,
-      };
 
       if (manualOverrideLabel) {
         payload.detectedLabel = manualOverrideLabel;
@@ -332,24 +359,7 @@ export default function CameraScreen() {
         payload.detectedLabel = selectedLabel;
       }
 
-      const response = await fetch(`${apiBaseUrl}/api/recognize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      let data = null;
-      try {
-        data = await response.json();
-      } catch (parseError) {
-        data = null;
-      }
-
-      if (!response.ok) {
-        throw new Error(data?.message || `Request failed (${response.status})`);
-      }
+      const data = await executeRecognition(payload);
       const singleUse = isSingleUseResult(data);
       setGoalState((prev) => {
         const currentWeek = getWeekKey();
@@ -370,10 +380,47 @@ export default function CameraScreen() {
       });
       setResult(data);
     } catch (fetchError) {
+      const maybeOffline =
+        !fetchError.code &&
+        (String(fetchError.message).includes('Network request failed') ||
+          String(fetchError.message).includes('Failed to fetch'));
+      if (maybeOffline) {
+        const queued = {
+          id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+          payload,
+          createdAt: new Date().toISOString(),
+        };
+        setQueuedRequests((prev) => [queued, ...prev].slice(0, 20));
+        setError('You appear offline. Scan request queued.');
+      } else {
+        setError(
+          fetchError.message
+            ? `Could not analyze right now: ${fetchError.message}`
+            : 'Could not analyze right now. Please check app and backend logs.'
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRetryQueued = async () => {
+    if (!queuedRequests.length || loading) {
+      return;
+    }
+    setLoading(true);
+    setError('');
+    const [next, ...rest] = queuedRequests;
+    try {
+      const data = await executeRecognition(next.payload);
+      setResult(data);
+      setQueuedRequests(rest);
+      setMessage('Queued scan processed successfully.');
+    } catch (retryError) {
       setError(
-        fetchError.message
-          ? `Could not analyze right now: ${fetchError.message}`
-          : 'Could not analyze right now. Please check app and backend logs.'
+        retryError.message
+          ? `Retry failed: ${retryError.message}`
+          : 'Retry failed. You may still be offline.'
       );
     } finally {
       setLoading(false);
@@ -452,6 +499,17 @@ export default function CameraScreen() {
     handleAnalyze(greenerLabel);
   };
 
+  const handleVoiceSummary = () => {
+    if (!result) {
+      return;
+    }
+    const summary = `${result.name ?? 'Item'}. Eco score ${result.ecoScore ?? '-'} out of 100. ${
+      result.altRecommendation ?? 'No alternative suggestion.'
+    }`;
+    AccessibilityInfo.announceForAccessibility(summary);
+    setMessage('Voice summary announced for accessibility.');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
@@ -510,11 +568,15 @@ export default function CameraScreen() {
             <View style={[styles.goalProgressFill, { width: `${goalProgress * 100}%` }]} />
           </View>
           <View style={styles.goalStatsRow}>
-            <Text style={styles.goalStatText}>
+            <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
               Progress: {goalState.avoidedSingleUseCount}/{GOAL_TARGET}
             </Text>
-            <Text style={styles.goalStatText}>Streak: {goalState.currentStreak}</Text>
-            <Text style={styles.goalStatText}>Best: {goalState.bestStreak}</Text>
+            <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
+              Streak: {goalState.currentStreak}
+            </Text>
+            <Text style={styles.goalStatText} maxFontSizeMultiplier={1.4}>
+              Best: {goalState.bestStreak}
+            </Text>
           </View>
         </View>
 
@@ -602,6 +664,22 @@ export default function CameraScreen() {
             <Text style={styles.analyzeButtonText}>Analyze Item</Text>
           )}
         </Pressable>
+
+        {queuedRequests.length ? (
+          <View style={[styles.noticeCard, styles.queuedCard]}>
+            <View style={styles.queuedHeader}>
+              <Text style={styles.noticeText} maxFontSizeMultiplier={1.4}>
+                Offline queue pending: {queuedRequests.length}
+              </Text>
+              <Pressable style={styles.retryBadge} onPress={handleRetryQueued}>
+                <Text style={styles.retryBadgeText}>Retry now</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.queuedMeta}>
+              Oldest queued at {new Date(queuedRequests[queuedRequests.length - 1].createdAt).toLocaleTimeString()}
+            </Text>
+          </View>
+        ) : null}
 
         {loading ? (
           <View style={styles.skeletonCard}>
@@ -716,6 +794,9 @@ export default function CameraScreen() {
               </Pressable>
               <Pressable style={styles.secondaryActionButton} onPress={handleSaveResult}>
                 <Text style={styles.secondaryActionText}>Save</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryActionButton} onPress={handleVoiceSummary}>
+                <Text style={styles.secondaryActionText}>Voice summary</Text>
               </Pressable>
             </View>
 
@@ -985,7 +1066,7 @@ function createStyles(palette) {
     },
     modeButton: {
       flex: 1,
-      minHeight: 42,
+      minHeight: 48,
       borderRadius: 10,
       borderWidth: 1,
       borderColor: palette.border,
@@ -1032,7 +1113,7 @@ function createStyles(palette) {
       borderColor: palette.border,
     },
     dropdownTrigger: {
-      minHeight: 46,
+      minHeight: 50,
       borderWidth: 1,
       borderColor: palette.border,
       borderRadius: 12,
@@ -1053,7 +1134,7 @@ function createStyles(palette) {
       fontWeight: '700',
     },
     analyzeButton: {
-      minHeight: 56,
+      minHeight: 58,
       backgroundColor: palette.action,
       borderRadius: 12,
       borderWidth: 1,
@@ -1147,6 +1228,35 @@ function createStyles(palette) {
     errorCard: {
       backgroundColor: palette.noticeErrorBg,
       borderColor: palette.noticeErrorBorder,
+    },
+    queuedCard: {
+      backgroundColor: '#FEF9C3',
+      borderColor: '#EAB308',
+    },
+    queuedHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    retryBadge: {
+      minHeight: 34,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: '#B45309',
+      backgroundColor: '#FCD34D',
+      justifyContent: 'center',
+    },
+    retryBadgeText: {
+      color: '#78350F',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    queuedMeta: {
+      color: '#7C2D12',
+      fontSize: 12,
+      marginTop: 6,
     },
     noticeText: {
       color: palette.textPrimary,
@@ -1267,7 +1377,9 @@ function createStyles(palette) {
       backgroundColor: palette.input,
       borderRadius: 999,
       paddingHorizontal: 10,
-      paddingVertical: 8,
+      paddingVertical: 10,
+      minHeight: 40,
+      justifyContent: 'center',
     },
     secondaryActionText: {
       color: palette.textPrimary,
