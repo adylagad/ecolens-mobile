@@ -444,6 +444,11 @@ export default function CameraScreen({
 
   const scoreTone = getScoreTone(result?.ecoScore);
   const confidenceTone = getConfidenceTone(result?.confidence);
+  const catalogCoveragePct =
+    typeof result?.catalogCoverage === 'number' && Number.isFinite(result.catalogCoverage)
+      ? Math.round(result.catalogCoverage * 100)
+      : null;
+  const catalogMatchStrategy = String(result?.catalogMatchStrategy ?? '').trim();
   const showLowConfidenceHelp =
     typeof result?.confidence === 'number' && result.confidence < 0.6 && !loading;
   const suggestedConfirmLabels = useMemo(() => {
@@ -834,6 +839,11 @@ export default function CameraScreen({
               {String(result.explanation ?? '-')}
             </Text>
             <Text style={styles.resultFootnote}>Confidence: {String(result.confidence ?? '-')}</Text>
+            {catalogCoveragePct !== null ? (
+              <Text style={styles.resultFootnote}>
+                Catalog coverage: {catalogCoveragePct}%{catalogMatchStrategy ? ` (${catalogMatchStrategy})` : ''}
+              </Text>
+            ) : null}
 
             {showLowConfidenceHelp ? (
               <View style={styles.confirmBlock}>
