@@ -195,6 +195,7 @@ export default function CameraScreen({
   devBaseUrl = '',
   setDevBaseUrl = () => {},
   apiBaseUrl = '',
+  userId = '',
   themeName = 'dark',
   setThemeName = () => {},
 }) {
@@ -437,6 +438,7 @@ export default function CameraScreen({
         ? result.confidence
         : Number.parseFloat(String(result.confidence ?? '0')) || 0;
     const requestBody = {
+      userId: userId || 'anonymous',
       item: String(result.name ?? 'Unknown item'),
       category: String(result.category ?? 'unknown'),
       ecoScore,
@@ -444,7 +446,8 @@ export default function CameraScreen({
     };
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/history`, {
+      const userQuery = `userId=${encodeURIComponent(requestBody.userId)}`;
+      const response = await fetch(`${apiBaseUrl}/api/history?${userQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -477,7 +480,7 @@ export default function CameraScreen({
       setScanHistory((prev) => [normalizedEntry, ...prev].slice(0, 40));
 
       try {
-        const statsResponse = await fetch(`${apiBaseUrl}/api/history/stats`);
+        const statsResponse = await fetch(`${apiBaseUrl}/api/history/stats?${userQuery}`);
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           setHistoryStats({

@@ -28,6 +28,22 @@ const TABS = [
   { key: 'meta', label: 'Meta' },
 ];
 
+function resolveUserId(authUser) {
+  if (!authUser) {
+    return '';
+  }
+  if (authUser.email && String(authUser.email).trim()) {
+    return String(authUser.email).trim().toLowerCase();
+  }
+  if (authUser.provider && String(authUser.provider).trim()) {
+    return String(authUser.provider).trim().toLowerCase();
+  }
+  if (authUser.name && String(authUser.name).trim()) {
+    return String(authUser.name).trim().toLowerCase().replace(/\s+/g, '-');
+  }
+  return 'anonymous';
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [scanHistory, setScanHistory] = useState([]);
@@ -43,15 +59,20 @@ export default function App() {
   const [themeName, setThemeName] = useState('dark');
   const [authUser, setAuthUser] = useState(null);
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
+  const userId = resolveUserId(authUser);
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = createStyles(palette);
 
   useEffect(() => {
+    if (!userId) {
+      return;
+    }
     const loadHistory = async () => {
       try {
+        const userQuery = `userId=${encodeURIComponent(userId)}`;
         const [historyResponse, statsResponse] = await Promise.all([
-          fetch(`${apiBaseUrl}/api/history`),
-          fetch(`${apiBaseUrl}/api/history/stats`),
+          fetch(`${apiBaseUrl}/api/history?${userQuery}`),
+          fetch(`${apiBaseUrl}/api/history/stats?${userQuery}`),
         ]);
 
         if (historyResponse.ok) {
@@ -73,7 +94,7 @@ export default function App() {
     };
 
     loadHistory();
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, userId]);
 
   return (
     <SafeAreaView style={styles.appRoot}>
@@ -101,6 +122,7 @@ export default function App() {
             devBaseUrl={devBaseUrl}
             setDevBaseUrl={setDevBaseUrl}
             apiBaseUrl={apiBaseUrl}
+            userId={userId}
             themeName={themeName}
             setThemeName={setThemeName}
           />
