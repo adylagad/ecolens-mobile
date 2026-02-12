@@ -80,6 +80,19 @@ function getScoreTone(score) {
   return { bg: '#7F1D1D', text: '#FEE2E2', label: 'High Impact' };
 }
 
+function getConfidenceTone(confidence) {
+  if (typeof confidence !== 'number') {
+    return { bg: '#334155', text: '#E2E8F0', label: 'Unknown' };
+  }
+  if (confidence >= 0.8) {
+    return { bg: '#14532D', text: '#DCFCE7', label: 'Confidence: High' };
+  }
+  if (confidence >= 0.6) {
+    return { bg: '#78350F', text: '#FEF3C7', label: 'Confidence: Medium' };
+  }
+  return { bg: '#7F1D1D', text: '#FEE2E2', label: 'Confidence: Low' };
+}
+
 export default function CameraScreen() {
   const cameraProviderRef = useRef(null);
   const resultAnim = useRef(new Animated.Value(0)).current;
@@ -99,6 +112,9 @@ export default function CameraScreen() {
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const selectedLabelText =
     LABEL_OPTIONS.find((option) => option.value === selectedLabel)?.label || LABEL_OPTIONS[0].label;
+  const manualLabelOptions = LABEL_OPTIONS.filter(
+    (option) => option.value && option.value !== '__test_image__'
+  );
 
   useEffect(() => {
     if (!result) {
@@ -115,7 +131,7 @@ export default function CameraScreen() {
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (manualOverrideLabel = null) => {
     setLoading(true);
     setError('');
     setMessage('');
@@ -127,7 +143,9 @@ export default function CameraScreen() {
         confidence: 0.9,
       };
 
-      if (selectedLabel === '__test_image__') {
+      if (manualOverrideLabel) {
+        payload.detectedLabel = manualOverrideLabel;
+      } else if (selectedLabel === '__test_image__') {
         const imageBase64 = await loadDefaultImageBase64();
         payload.detectedLabel = '';
         payload.imageBase64 = imageBase64;
@@ -180,6 +198,23 @@ export default function CameraScreen() {
   };
 
   const scoreTone = getScoreTone(result?.ecoScore);
+  const confidenceTone = getConfidenceTone(result?.confidence);
+  const showLowConfidenceHelp =
+    typeof result?.confidence === 'number' && result.confidence < 0.6 && !loading;
+  const suggestedConfirmLabels = useMemo(() => {
+    if (!showLowConfidenceHelp || !result) {
+      return manualLabelOptions.slice(0, 3);
+    }
+    const hintText = `${result.name ?? ''} ${result.category ?? ''}`.toLowerCase();
+    const ranked = [...manualLabelOptions].sort((a, b) => {
+      const aTokens = a.value.toLowerCase().split(' ');
+      const bTokens = b.value.toLowerCase().split(' ');
+      const aScore = aTokens.filter((token) => hintText.includes(token)).length;
+      const bScore = bTokens.filter((token) => hintText.includes(token)).length;
+      return bScore - aScore;
+    });
+    return ranked.slice(0, 3);
+  }, [manualLabelOptions, result, showLowConfidenceHelp]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -344,10 +379,17 @@ export default function CameraScreen() {
           >
             <View style={styles.resultHeader}>
               <Text style={styles.resultTitle}>{result.title || result.name || 'Result'}</Text>
-              <View style={[styles.scoreBadge, { backgroundColor: scoreTone.bg }]}> 
-                <Text style={[styles.scoreBadgeText, { color: scoreTone.text }]}> 
-                  {scoreTone.label}
-                </Text>
+              <View style={styles.badgeColumn}>
+                <View style={[styles.scoreBadge, { backgroundColor: scoreTone.bg }]}>
+                  <Text style={[styles.scoreBadgeText, { color: scoreTone.text }]}>
+                    {scoreTone.label}
+                  </Text>
+                </View>
+                <View style={[styles.scoreBadge, { backgroundColor: confidenceTone.bg }]}>
+                  <Text style={[styles.scoreBadgeText, { color: confidenceTone.text }]}>
+                    {confidenceTone.label}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -371,6 +413,26 @@ export default function CameraScreen() {
               {String(result.explanation ?? '-')}
             </Text>
             <Text style={styles.resultFootnote}>Confidence: {String(result.confidence ?? '-')}</Text>
+
+            {showLowConfidenceHelp ? (
+              <View style={styles.confirmBlock}>
+                <Text style={styles.confirmTitle}>Low confidence. Confirm the item:</Text>
+                <View style={styles.confirmChipRow}>
+                  {suggestedConfirmLabels.map((option) => (
+                    <Pressable
+                      key={option.value}
+                      style={styles.confirmChip}
+                      onPress={() => {
+                        setSelectedLabel(option.value);
+                        handleAnalyze(option.value);
+                      }}
+                    >
+                      <Text style={styles.confirmChipText}>{option.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
           </Animated.View>
         ) : null}
       </ScrollView>
@@ -634,7 +696,7 @@ function createStyles(palette) {
     },
     resultHeader: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
       gap: 10,
     },
@@ -653,6 +715,10 @@ function createStyles(palette) {
       fontSize: 11,
       fontWeight: '800',
       letterSpacing: 0.4,
+    },
+    badgeColumn: {
+      alignItems: 'flex-end',
+      gap: 6,
     },
     metricRow: {
       flexDirection: 'row',
@@ -688,6 +754,37 @@ function createStyles(palette) {
     resultFootnote: {
       color: palette.textSecondary,
       fontSize: 12,
+    },
+    confirmBlock: {
+      backgroundColor: palette.cardAlt,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 10,
+      padding: 10,
+      gap: 8,
+    },
+    confirmTitle: {
+      color: palette.textPrimary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    confirmChipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    confirmChip: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    confirmChipText: {
+      color: palette.textPrimary,
+      fontSize: 12,
+      fontWeight: '700',
     },
     modalBackdrop: {
       flex: 1,
