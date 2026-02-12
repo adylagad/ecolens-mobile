@@ -133,6 +133,50 @@ function buildScoreBreakdown(result) {
   return rows;
 }
 
+function formatScoreFactorDelta(delta) {
+  if (typeof delta === 'number' && Number.isFinite(delta)) {
+    const normalized = Number(delta.toFixed(2));
+    if (normalized > 0) {
+      return `+${normalized}`;
+    }
+    if (normalized < 0) {
+      return `${normalized}`;
+    }
+    return '0';
+  }
+  const raw = String(delta ?? '').trim();
+  if (!raw) {
+    return '0';
+  }
+  if (raw.startsWith('+') || raw.startsWith('-')) {
+    return raw;
+  }
+  const asNumber = Number.parseFloat(raw);
+  if (Number.isFinite(asNumber)) {
+    const normalized = Number(asNumber.toFixed(2));
+    if (normalized > 0) {
+      return `+${normalized}`;
+    }
+    if (normalized < 0) {
+      return `${normalized}`;
+    }
+    return '0';
+  }
+  return raw;
+}
+
+function buildScoreBreakdownFromApi(result) {
+  if (!result || !Array.isArray(result.scoreFactors) || !result.scoreFactors.length) {
+    return [];
+  }
+  return result.scoreFactors.map((factor, index) => ({
+    code: String(factor?.code ?? `factor-${index}`),
+    label: String(factor?.label ?? factor?.code ?? 'Score factor'),
+    detail: String(factor?.detail ?? '').trim(),
+    delta: formatScoreFactorDelta(factor?.delta),
+  }));
+}
+
 function getAlternativeSuggestions(result) {
   if (!result) {
     return [];
@@ -404,7 +448,13 @@ export default function CameraScreen({
     });
     return ranked.slice(0, 3);
   }, [manualLabelOptions, result, showLowConfidenceHelp]);
-  const scoreBreakdown = useMemo(() => buildScoreBreakdown(result), [result]);
+  const scoreBreakdown = useMemo(() => {
+    const apiRows = buildScoreBreakdownFromApi(result);
+    if (apiRows.length) {
+      return apiRows;
+    }
+    return buildScoreBreakdown(result);
+  }, [result]);
   const alternativeSuggestions = useMemo(() => getAlternativeSuggestions(result), [result]);
   const greenerLabel = useMemo(() => getGreenerAlternativeLabel(result), [result]);
   const safeGoalState = goalState ?? {
@@ -820,8 +870,11 @@ export default function CameraScreen({
               {isBreakdownOpen ? (
                 <View style={styles.breakdownList}>
                   {scoreBreakdown.map((row, index) => (
-                    <View key={`${row.label}-${index}`} style={styles.breakdownRow}>
-                      <Text style={styles.breakdownLabel}>{row.label}</Text>
+                    <View key={`${row.code ?? row.label}-${index}`} style={styles.breakdownRow}>
+                      <View style={styles.breakdownLabelBlock}>
+                        <Text style={styles.breakdownLabel}>{row.label}</Text>
+                        {row.detail ? <Text style={styles.breakdownDetail}>{row.detail}</Text> : null}
+                      </View>
                       <Text
                         style={[
                           styles.breakdownDelta,
@@ -1357,6 +1410,14 @@ function createStyles(palette) {
       flex: 1,
       color: palette.textSecondary,
       fontSize: 12,
+    },
+    breakdownLabelBlock: {
+      flex: 1,
+      gap: 2,
+    },
+    breakdownDetail: {
+      color: palette.textMuted,
+      fontSize: 11,
     },
     breakdownDelta: {
       fontSize: 12,
