@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "ecolens-mobile",
+    "owner": "adylagad",
     "slug": "ecolens-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,9 +14,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.adylagad.ecolensmobile",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.adylagad.ecolensmobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
