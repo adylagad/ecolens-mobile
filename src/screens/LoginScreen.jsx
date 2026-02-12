@@ -11,10 +11,8 @@ WebBrowser.maybeCompleteAuthSession();
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '';
-const EXPO_PROXY_PROJECT = '@adylagad/ecolens-mobile';
 
 function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
-  const isExpoGo = Constants.appOwnership === 'expo';
   const googleConfig = {
     webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
     expoClientId: GOOGLE_WEB_CLIENT_ID || undefined,
@@ -81,11 +79,7 @@ function GoogleSignInButton({ styles, palette, onLogin, setAuthError }) {
       ]}
       onPress={() => {
         setAuthError('');
-        if (isExpoGo) {
-          promptAsync({ useProxy: true, projectNameForProxy: EXPO_PROXY_PROJECT });
-        } else {
-          promptAsync();
-        }
+        promptAsync();
       }}
     >
       {loadingProfile ? (
@@ -111,6 +105,7 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
     : Platform.OS === 'android'
       ? Boolean(GOOGLE_ANDROID_CLIENT_ID)
       : Boolean(GOOGLE_WEB_CLIENT_ID);
+  const canUseGoogleAuth = !isExpoGo && hasGoogleClientIds;
   const missingClientIdHint = Platform.OS === 'ios'
     ? 'Set EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID for iOS.'
     : Platform.OS === 'android'
@@ -146,7 +141,7 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
             </Pressable>
           </View>
 
-          {hasGoogleClientIds ? (
+          {canUseGoogleAuth ? (
             <GoogleSignInButton
               styles={styles}
               palette={palette}
@@ -158,9 +153,19 @@ export default function LoginScreen({ themeName = 'dark', setThemeName = () => {
               <Pressable disabled style={[styles.googleButton, styles.googleButtonDisabled]}>
                 <Text style={styles.googleButtonText}>Continue with Google</Text>
               </Pressable>
-              <Text style={styles.hint}>{missingClientIdHint}</Text>
+              <Text style={styles.hint}>
+                {isExpoGo
+                  ? 'Google sign-in is disabled in Expo Go. Use a development build to test OAuth.'
+                  : missingClientIdHint}
+              </Text>
             </>
           )}
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => onLogin({ name: 'Guest User', provider: 'guest' })}
+          >
+            <Text style={styles.secondaryButtonText}>Continue as Guest</Text>
+          </Pressable>
 
           {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
         </View>
@@ -257,6 +262,20 @@ function createStyles(palette) {
       color: palette.actionText,
       fontWeight: '800',
       fontSize: 16,
+    },
+    secondaryButton: {
+      minHeight: 48,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    secondaryButtonText: {
+      color: palette.textPrimary,
+      fontWeight: '700',
+      fontSize: 15,
     },
     loadingRow: {
       flexDirection: 'row',
