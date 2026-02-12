@@ -56,6 +56,31 @@ function resolveUserId(authUser) {
   return 'anonymous';
 }
 
+function resolveHistoryErrorMessage(error, statusCode, apiMode, apiBaseUrl) {
+  const raw = String(error?.message ?? '').trim();
+  if (
+    raw.includes('Network request failed') ||
+    raw.includes('Failed to fetch') ||
+    raw.includes('Load failed')
+  ) {
+    const modeLabel = apiMode === 'development' ? 'Dev' : 'Production';
+    return `${modeLabel} backend is unreachable at ${apiBaseUrl}.`;
+  }
+  if (statusCode === 404) {
+    return 'History endpoint is unavailable on this backend (404).';
+  }
+  if (statusCode === 401 || statusCode === 403) {
+    return `History access is denied on this backend (${statusCode}).`;
+  }
+  if (statusCode >= 500) {
+    return `Backend failed while loading history (${statusCode}).`;
+  }
+  if (raw) {
+    return `Could not load history: ${raw}`;
+  }
+  return 'Could not load history right now.';
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [scanHistory, setScanHistory] = useState([]);
@@ -146,6 +171,7 @@ export default function App() {
       return;
     }
     setHistoryLoading(true);
+    let statusCode = null;
     try {
       const userQuery = `userId=${encodeURIComponent(userId)}`;
       const historyUrl = `${buildApiUrl(apiBaseUrl, '/api/history')}?${userQuery}`;
@@ -156,6 +182,7 @@ export default function App() {
         const historyData = await historyResponse.json();
         setScanHistory(Array.isArray(historyData) ? historyData : []);
       } else {
+        statusCode = historyResponse.status;
         let backendMessage = '';
         try {
           const errorBody = await historyResponse.json();
@@ -190,10 +217,7 @@ export default function App() {
         // Keep history usable even if stats endpoint is unavailable.
       }
     } catch (error) {
-      showToast(
-        error?.message ? `Could not load history: ${error.message}` : 'Could not load history right now.',
-        'error'
-      );
+      showToast(resolveHistoryErrorMessage(error, statusCode, apiMode, apiBaseUrl), 'error');
     } finally {
       setHistoryLoading(false);
     }

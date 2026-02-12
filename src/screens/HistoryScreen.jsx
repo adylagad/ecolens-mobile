@@ -50,22 +50,33 @@ export default function HistoryScreen({
         <View style={styles.card}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>History Timeline</Text>
-            <Pressable
-              style={[styles.filterPill, highImpactOnly ? styles.filterPillActive : null]}
-              onPress={() => setHighImpactOnly((prev) => !prev)}
-            >
-              <Text style={[styles.filterPillText, highImpactOnly ? styles.filterPillTextActive : null]}>
-                {highImpactOnly
-                  ? `High impact (<${highImpactThreshold}): ON`
-                  : `High impact (<${highImpactThreshold}): OFF`}
-              </Text>
-            </Pressable>
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={[styles.filterPill, highImpactOnly ? styles.filterPillActive : null]}
+                onPress={() => setHighImpactOnly((prev) => !prev)}
+              >
+                <Text style={[styles.filterPillText, highImpactOnly ? styles.filterPillTextActive : null]}>
+                  {highImpactOnly
+                    ? `High impact (<${highImpactThreshold}): ON`
+                    : `High impact (<${highImpactThreshold}): OFF`}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.refreshButton,
+                  loading ? styles.refreshButtonDisabled : null,
+                  pressed && !loading ? styles.refreshButtonPressed : null,
+                ]}
+                onPress={onRetry}
+                disabled={loading}
+              >
+                <Text style={styles.refreshButtonIcon}>↻</Text>
+                <Text style={styles.refreshButtonText}>{loading ? 'Refreshing...' : 'Refresh'}</Text>
+              </Pressable>
+            </View>
           </View>
           <View style={styles.hintRow}>
             <Text style={styles.hint}>Track scans and monitor progress over time.</Text>
-            <Pressable style={styles.retryButton} onPress={onRetry}>
-              <Text style={styles.retryButtonText}>Refresh</Text>
-            </Pressable>
           </View>
 
           <View style={styles.statsRow}>
@@ -136,14 +147,20 @@ function createStyles(palette) {
     },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   title: {
     color: palette.textPrimary,
     fontSize: 18,
     fontWeight: '800',
+    flex: 1,
   },
   hint: {
     color: palette.textSecondary,
@@ -151,9 +168,7 @@ function createStyles(palette) {
   },
   hintRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    alignItems: 'flex-start',
   },
   filterPill: {
     borderWidth: 1,
@@ -161,8 +176,8 @@ function createStyles(palette) {
     backgroundColor: palette.input,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 38,
+    minHeight: 36,
+    height: 36,
     justifyContent: 'center',
   },
   filterPillActive: {
@@ -207,16 +222,31 @@ function createStyles(palette) {
     gap: 10,
     alignItems: 'flex-start',
   },
-  retryButton: {
-    minHeight: 38,
-    borderRadius: 10,
+  refreshButton: {
+    minHeight: 36,
+    height: 36,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: palette.border,
     backgroundColor: palette.input,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     justifyContent: 'center',
   },
-  retryButtonText: {
+  refreshButtonPressed: {
+    opacity: 0.85,
+  },
+  refreshButtonDisabled: {
+    opacity: 0.6,
+  },
+  refreshButtonIcon: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  refreshButtonText: {
     color: palette.textPrimary,
     fontWeight: '700',
     fontSize: 12,
