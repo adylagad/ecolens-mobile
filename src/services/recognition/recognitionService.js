@@ -42,11 +42,16 @@ function parseConfidenceValue(result) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export async function recognizeItem({ payload, apiBaseUrl, preferredEngine = RECOGNITION_ENGINES.AUTO }) {
+export async function recognizeItem({
+  payload,
+  apiBaseUrl,
+  preferredEngine = RECOGNITION_ENGINES.AUTO,
+  authToken = '',
+}) {
   const engine = normalizeEngine(preferredEngine);
 
   if (engine === RECOGNITION_ENGINES.BACKEND) {
-    return recognizeWithBackend({ payload, apiBaseUrl });
+    return recognizeWithBackend({ payload, apiBaseUrl, authToken });
   }
 
   if (engine === RECOGNITION_ENGINES.ON_DEVICE) {
@@ -66,7 +71,7 @@ export async function recognizeItem({ payload, apiBaseUrl, preferredEngine = REC
       }
 
       try {
-        const fallback = await recognizeWithBackend({ payload, apiBaseUrl });
+        const fallback = await recognizeWithBackend({ payload, apiBaseUrl, authToken });
         return {
           ...fallback,
           runtime: {
@@ -92,7 +97,7 @@ export async function recognizeItem({ payload, apiBaseUrl, preferredEngine = REC
         };
       }
     } catch (onDeviceError) {
-      const fallback = await recognizeWithBackend({ payload, apiBaseUrl });
+      const fallback = await recognizeWithBackend({ payload, apiBaseUrl, authToken });
       return {
         ...fallback,
         runtime: {
@@ -104,5 +109,5 @@ export async function recognizeItem({ payload, apiBaseUrl, preferredEngine = REC
     }
   }
 
-  return recognizeWithBackend({ payload, apiBaseUrl });
+  return recognizeWithBackend({ payload, apiBaseUrl, authToken });
 }

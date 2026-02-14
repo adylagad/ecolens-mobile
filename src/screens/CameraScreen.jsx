@@ -577,7 +577,7 @@ export default function CameraScreen({
   devBaseUrl = '',
   setDevBaseUrl = () => {},
   apiBaseUrl = '',
-  userId = '',
+  authToken = '',
   themeName = 'dark',
   showToast = () => {},
 }) {
@@ -656,11 +656,23 @@ export default function CameraScreen({
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
+  const withAuthHeader = (headers = {}) => {
+    const token = String(authToken ?? '').trim();
+    if (!token) {
+      return headers;
+    }
+    return {
+      ...headers,
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
   const executeRecognition = async (payload, preferredEngine = inferenceEngine) => {
     return recognizeItem({
       payload,
       apiBaseUrl,
       preferredEngine,
+      authToken,
     });
   };
 
@@ -899,7 +911,6 @@ export default function CameraScreen({
         ? result.confidence
         : Number.parseFloat(String(result.confidence ?? '0')) || 0;
     const requestBody = {
-      userId: userId || 'anonymous',
       item: String(result.name ?? 'Unknown item'),
       category: String(result.category ?? 'unknown'),
       ecoScore,
@@ -907,10 +918,9 @@ export default function CameraScreen({
     };
 
     try {
-      const userQuery = `userId=${encodeURIComponent(requestBody.userId)}`;
-      const response = await fetch(`${buildApiUrl(apiBaseUrl, '/api/history')}?${userQuery}`, {
+      const response = await fetch(buildApiUrl(apiBaseUrl, '/api/history'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: withAuthHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(requestBody),
       });
 
@@ -941,7 +951,9 @@ export default function CameraScreen({
       setScanHistory((prev) => [normalizedEntry, ...prev].slice(0, 40));
 
       try {
-        const statsResponse = await fetch(`${buildApiUrl(apiBaseUrl, '/api/history/stats')}?${userQuery}`);
+        const statsResponse = await fetch(buildApiUrl(apiBaseUrl, '/api/history/stats'), {
+          headers: withAuthHeader({}),
+        });
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           setHistoryStats((prev) => ({

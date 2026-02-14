@@ -5,12 +5,14 @@ function toStringMessage(value, fallback) {
   return text || fallback;
 }
 
-export async function recognizeWithBackend({ payload, apiBaseUrl }) {
+export async function recognizeWithBackend({ payload, apiBaseUrl, authToken = '' }) {
   const endpoint = buildApiUrl(apiBaseUrl, '/api/recognize');
+  const token = String(authToken ?? '').trim();
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(payload),
   });
