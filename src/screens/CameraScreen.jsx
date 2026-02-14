@@ -105,6 +105,9 @@ function buildRuntimeLabel(runtime) {
   if (runtime.engine === 'manual-label') {
     return 'Manual label';
   }
+  if (runtime.engine === RECOGNITION_ENGINES.ON_DEVICE && runtime.degradedToOnDevice) {
+    return 'On-device (backend fallback unavailable)';
+  }
   const engine = runtime.engine === RECOGNITION_ENGINES.ON_DEVICE ? 'On-device' : 'Backend';
   if (runtime.fallbackFrom === RECOGNITION_ENGINES.ON_DEVICE) {
     return `${engine} (fallback from on-device)`;
@@ -129,6 +132,15 @@ function buildRuntimeBadge(runtime, themeName = 'dark') {
       bg: isLight ? '#EDE9FE' : 'rgba(167, 139, 250, 0.18)',
       text: isLight ? '#5B21B6' : '#DDD6FE',
       border: isLight ? '#C4B5FD' : 'rgba(196, 181, 253, 0.36)',
+    };
+  }
+
+  if (runtime.engine === RECOGNITION_ENGINES.ON_DEVICE && runtime.degradedToOnDevice) {
+    return {
+      label: 'Source: On-device (degraded)',
+      bg: isLight ? '#FEF3C7' : 'rgba(245, 158, 11, 0.14)',
+      text: isLight ? '#92400E' : '#FCD34D',
+      border: isLight ? '#FCD34D' : 'rgba(251, 191, 36, 0.32)',
     };
   }
 

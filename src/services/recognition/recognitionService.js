@@ -9,6 +9,7 @@ export const RECOGNITION_ENGINES = {
 };
 
 const DEFAULT_ON_DEVICE_FALLBACK_CONFIDENCE = 0.45;
+const HARD_REJECT_ONDEVICE_CONFIDENCE = 0.3;
 
 function normalizeEngine(engine) {
   const value = String(engine ?? '').trim().toLowerCase();
@@ -42,16 +43,63 @@ function parseConfidenceValue(result) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeLabelText(value) {
+  const text = String(value ?? '').trim();
+  return text;
+}
+
+function readTopPredictionLabel(result) {
+  const topPredictions = Array.isArray(result?.data?.topPredictions) ? result.data.topPredictions : [];
+  for (const item of topPredictions) {
+    const candidate = normalizeLabelText(item?.name ?? item?.label ?? item?.className);
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
+function readOnDeviceLabel(result) {
+  const direct = normalizeLabelText(result?.data?.name ?? result?.data?.label);
+  if (direct) {
+    return direct;
+  }
+  return readTopPredictionLabel(result);
+}
+
+function buildBackendFallbackPayload(payload, onDeviceResult) {
+  const basePayload = {
+    ...(payload ?? {}),
+  };
+  const existingLabel = normalizeLabelText(basePayload.detectedLabel);
+  if (existingLabel) {
+    return basePayload;
+  }
+
+  const onDeviceLabel = readOnDeviceLabel(onDeviceResult);
+  if (onDeviceLabel) {
+    return {
+      ...basePayload,
+      detectedLabel: onDeviceLabel,
+      imageBase64: '',
+    };
+  }
+  return basePayload;
+}
+
 async function fallbackToBackendOrThrow({
   payload,
+  onDeviceResult,
   apiBaseUrl,
   authToken,
   onDeviceConfidence,
   fallbackThreshold,
   reasonPrefix = 'On-device confidence',
+  allowOnDeviceDegrade = true,
 }) {
+  const fallbackPayload = buildBackendFallbackPayload(payload, onDeviceResult);
   try {
-    const fallback = await recognizeWithBackend({ payload, apiBaseUrl, authToken });
+    const fallback = await recognizeWithBackend({ payload: fallbackPayload, apiBaseUrl, authToken });
     return {
       ...fallback,
       runtime: {
@@ -60,9 +108,36 @@ async function fallbackToBackendOrThrow({
         fallbackReason: `${reasonPrefix} ${onDeviceConfidence.toFixed(3)} below threshold ${fallbackThreshold.toFixed(3)}`,
         onDeviceConfidence,
         onDeviceFallbackThreshold: fallbackThreshold,
+        backendFallbackMode:
+          String(fallbackPayload?.imageBase64 ?? '').trim().length > 0
+            ? 'image'
+            : 'detected-label',
       },
     };
   } catch (backendFallbackError) {
+    const canDegradeToOnDevice =
+      allowOnDeviceDegrade &&
+      onDeviceResult &&
+      typeof onDeviceResult === 'object' &&
+      Number.isFinite(onDeviceConfidence) &&
+      onDeviceConfidence >= HARD_REJECT_ONDEVICE_CONFIDENCE;
+
+    if (canDegradeToOnDevice) {
+      return {
+        ...onDeviceResult,
+        runtime: {
+          ...(onDeviceResult.runtime ?? {}),
+          fallbackAttempted: true,
+          fallbackFrom: RECOGNITION_ENGINES.ON_DEVICE,
+          fallbackReason: `${reasonPrefix} ${onDeviceConfidence.toFixed(3)} below threshold ${fallbackThreshold.toFixed(3)}`,
+          fallbackError: String(backendFallbackError?.message ?? 'Backend fallback failed'),
+          onDeviceConfidence,
+          onDeviceFallbackThreshold: fallbackThreshold,
+          degradedToOnDevice: true,
+        },
+      };
+    }
+
     const fallbackError = new Error(
       backendFallbackError?.message
         ? `Low-confidence on-device result rejected (${onDeviceConfidence.toFixed(3)}). Backend fallback failed: ${backendFallbackError.message}`
@@ -94,6 +169,7 @@ export async function recognizeItem({
     }
     return fallbackToBackendOrThrow({
       payload,
+      onDeviceResult,
       apiBaseUrl,
       authToken,
       onDeviceConfidence,
@@ -115,6 +191,7 @@ export async function recognizeItem({
 
       return fallbackToBackendOrThrow({
         payload,
+        onDeviceResult,
         apiBaseUrl,
         authToken,
         onDeviceConfidence,
