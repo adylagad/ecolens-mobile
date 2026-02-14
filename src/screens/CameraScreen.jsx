@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import CameraProvider from '../clients/CameraProvider';
 import { TEST_IMAGE_BASE64 } from '../config/testImageBase64';
+import { RECOGNITION_ENGINES, recognizeItem } from '../services/recognition/recognitionService';
+import { submitTrainingSample } from '../services/training/trainingSampleService';
 import { THEMES } from '../theme';
 import { buildApiUrl } from '../utils/apiUrl';
 
@@ -75,7 +77,74 @@ function getConfidenceTone(confidence, themeName = 'dark') {
 }
 
 const GOAL_TARGET = 5;
-const LOADING_STAGES = ['Uploading', 'Detecting', 'Scoring'];
+const INFERENCE_OPTIONS = [
+  { label: 'Auto', value: RECOGNITION_ENGINES.AUTO },
+  { label: 'On-device', value: RECOGNITION_ENGINES.ON_DEVICE },
+  { label: 'Backend', value: RECOGNITION_ENGINES.BACKEND },
+];
+const LOADING_STAGES_BY_ENGINE = {
+  [RECOGNITION_ENGINES.AUTO]: ['Preparing', 'Detecting', 'Summarizing'],
+  [RECOGNITION_ENGINES.ON_DEVICE]: ['Preparing', 'Running on-device', 'Summarizing'],
+  [RECOGNITION_ENGINES.BACKEND]: ['Uploading', 'Detecting', 'Scoring'],
+};
+
+function getInferenceLabel(engine) {
+  if (engine === RECOGNITION_ENGINES.ON_DEVICE) {
+    return 'On-device';
+  }
+  if (engine === RECOGNITION_ENGINES.BACKEND) {
+    return 'Backend';
+  }
+  return 'Auto';
+}
+
+function buildRuntimeLabel(runtime) {
+  if (!runtime || typeof runtime !== 'object') {
+    return 'No inference yet';
+  }
+  const engine = runtime.engine === RECOGNITION_ENGINES.ON_DEVICE ? 'On-device' : 'Backend';
+  if (runtime.fallbackFrom === RECOGNITION_ENGINES.ON_DEVICE) {
+    return `${engine} (fallback from on-device)`;
+  }
+  return engine;
+}
+
+function buildRuntimeBadge(runtime, themeName = 'dark') {
+  const isLight = themeName === 'light';
+  if (!runtime || typeof runtime !== 'object') {
+    return {
+      label: 'Source: Unknown',
+      bg: isLight ? '#E2E8F0' : 'rgba(148, 163, 184, 0.16)',
+      text: isLight ? '#334155' : '#E2E8F0',
+      border: isLight ? '#CBD5E1' : 'rgba(148, 163, 184, 0.35)',
+    };
+  }
+
+  if (runtime.engine === RECOGNITION_ENGINES.BACKEND && runtime.fallbackFrom === RECOGNITION_ENGINES.ON_DEVICE) {
+    return {
+      label: 'Source: Backend fallback',
+      bg: isLight ? '#FEF3C7' : 'rgba(245, 158, 11, 0.14)',
+      text: isLight ? '#92400E' : '#FCD34D',
+      border: isLight ? '#FCD34D' : 'rgba(251, 191, 36, 0.32)',
+    };
+  }
+
+  if (runtime.engine === RECOGNITION_ENGINES.BACKEND) {
+    return {
+      label: 'Source: Backend',
+      bg: isLight ? '#DBEAFE' : 'rgba(59, 130, 246, 0.18)',
+      text: isLight ? '#1D4ED8' : '#BFDBFE',
+      border: isLight ? '#93C5FD' : 'rgba(96, 165, 250, 0.36)',
+    };
+  }
+
+  return {
+    label: 'Source: On-device',
+    bg: isLight ? '#DCFCE7' : 'rgba(34, 197, 94, 0.16)',
+    text: isLight ? '#166534' : '#BBF7D0',
+    border: isLight ? '#86EFAC' : 'rgba(74, 222, 128, 0.34)',
+  };
+}
 
 function getWeekKey(date = new Date()) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -99,6 +168,242 @@ function isSingleUseResult(result) {
     combined.includes('plastic straw') ||
     combined.includes('paper cup')
   );
+}
+
+function normalizeCandidateLabel(value) {
+  const cleaned = String(value ?? '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) {
+    return '';
+  }
+  return cleaned
+    .split(' ')
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(' ');
+}
+
+function toFiniteNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  const parsed = Number.parseFloat(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildPredictionConfirmOptions(result, manualOptions) {
+  const out = [];
+  const seen = new Set();
+
+  const topPredictions = Array.isArray(result?.topPredictions) ? result.topPredictions : [];
+  for (const prediction of topPredictions) {
+    const rawName = String(prediction?.name ?? '').trim();
+    if (!rawName) {
+      continue;
+    }
+    const normalized = normalizeCandidateLabel(rawName);
+    if (!normalized) {
+      continue;
+    }
+    const key = normalized.toLowerCase();
+    if (key.startsWith('class ') || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push({ label: normalized, value: normalized });
+    if (out.length >= 3) {
+      break;
+    }
+  }
+
+  for (const option of manualOptions) {
+    const key = String(option.value ?? '').trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(option);
+    if (out.length >= 3) {
+      break;
+    }
+  }
+
+  return out.slice(0, 3);
+}
+
+function inferCategoryFromLabelText(label) {
+  const text = String(label ?? '').toLowerCase();
+  if (!text) {
+    return null;
+  }
+  if (text.includes('bottle') || text.includes('flask') || text.includes('thermos') || text.includes('tumbler') || text.includes('canteen')) {
+    if (text.includes('plastic') || text.includes('single-use') || text.includes('single use')) {
+      return 'single-use-plastic-bottle';
+    }
+    return 'reusable-hydration';
+  }
+  if (text.includes('lunch box') || text.includes('lunchbox') || text.includes('food container')) {
+    return 'reusable-container';
+  }
+  if (text.includes('cup') || text.includes('straw') || text.includes('wrapper') || text.includes('packaging')) {
+    return 'single-use-item';
+  }
+  if (text.includes('packet') || text.includes('carton') || text.includes('sachet') || text.includes('takeout')) {
+    return 'packaging';
+  }
+  if (text.includes('laptop') || text.includes('phone') || text.includes('charger') || text.includes('camera')) {
+    return 'electronic-device';
+  }
+  if (text.includes('shirt') || text.includes('jeans') || text.includes('jacket') || text.includes('hoodie')) {
+    return 'apparel';
+  }
+  if (text.includes('bag') || text.includes('shoe') || text.includes('chair') || text.includes('table')) {
+    return 'durable-household';
+  }
+  return 'general-object';
+}
+
+function clampEcoScore(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 55;
+  }
+  return Math.max(5, Math.min(96, Math.round(numeric)));
+}
+
+function containsAnyToken(text, tokens) {
+  return tokens.some((token) => text.includes(token));
+}
+
+function buildConfirmedProfile(label, previousResult = {}) {
+  const normalizedLabel = normalizeCandidateLabel(label);
+  const text = normalizedLabel.toLowerCase();
+  const category = inferCategoryFromLabelText(normalizedLabel) || 'general-object';
+
+  const factors = [];
+  const addFactor = (code, labelText, detail, delta) => {
+    factors.push({ code, label: labelText, detail, delta });
+  };
+
+  let score = 55;
+
+  const isReusable = containsAnyToken(text, [
+    'reusable', 'refillable', 'stainless', 'steel', 'glass', 'metal',
+    'thermos', 'tumbler', 'canteen', 'flask', 'durable', 'long lasting'
+  ]);
+  const isSingleUse = containsAnyToken(text, [
+    'single-use', 'single use', 'disposable', 'wrapper', 'styrofoam', 'foam cup',
+    'paper cup', 'plastic cup', 'plastic straw', 'takeout', 'to go'
+  ]);
+  const isPlastic = containsAnyToken(text, ['plastic', 'pet', 'polyethylene', 'polythene']);
+  const isPaper = containsAnyToken(text, ['paper', 'cardboard', 'carton']);
+  const isElectronics = category === 'electronic-device';
+  const isDurable = category === 'durable-household';
+  const isApparel = category === 'apparel';
+
+  if (isReusable) {
+    score += 18;
+    addFactor('confirmed_reusable', 'Reusable pattern', 'Confirmed label suggests repeated use and refillability.', +18);
+  }
+  if (isSingleUse) {
+    score -= 24;
+    addFactor('confirmed_single_use', 'Single-use pattern', 'Confirmed label indicates disposable lifecycle.', -24);
+  }
+  if (isPlastic && !isReusable) {
+    score -= 10;
+    addFactor('confirmed_plastic', 'Plastic material impact', 'Plastic-heavy item likely has higher waste burden.', -10);
+  }
+  if (isPaper && !isSingleUse) {
+    score += 3;
+    addFactor('confirmed_paper', 'Paper/cardboard material', 'Often easier to recycle than mixed plastics.', +3);
+  }
+  if (isElectronics) {
+    score -= 6;
+    addFactor('confirmed_electronics', 'Manufacturing footprint', 'Electronics carry high embodied impact; lifespan matters most.', -6);
+  }
+  if (isDurable) {
+    score += 6;
+    addFactor('confirmed_durable', 'Durability advantage', 'Longer usable life can amortize footprint.', +6);
+  }
+  if (isApparel) {
+    score -= 2;
+    addFactor('confirmed_apparel', 'Textile footprint', 'Fabric production impact depends on materials and wear lifetime.', -2);
+  }
+  if (category === 'reusable-hydration') {
+    score += 18;
+    addFactor('confirmed_reusable_hydration', 'Reusable hydration profile', 'Confirmed bottle/flask pattern maps to high reuse potential.', +18);
+  }
+  if (category === 'reusable-container') {
+    score += 12;
+    addFactor('confirmed_reusable_container', 'Reusable container profile', 'Container likely avoids repeated disposable packaging.', +12);
+  }
+  if (category === 'single-use-plastic-bottle') {
+    score -= 20;
+    addFactor('confirmed_su_plastic_bottle', 'Single-use plastic bottle profile', 'Frequent replacement and disposal pattern lowers score.', -20);
+  }
+  if (category === 'single-use-item' || category === 'packaging') {
+    score -= 12;
+    addFactor('confirmed_disposable_profile', 'Disposable profile', 'Confirmed label maps to common disposable usage.', -12);
+  }
+
+  const ecoScore = clampEcoScore(score);
+
+  const baseCo2ByCategory = {
+    'reusable-hydration': 35,
+    'reusable-container': 42,
+    'single-use-plastic-bottle': 152,
+    'single-use-item': 145,
+    packaging: 130,
+    'electronic-device': 125,
+    'durable-household': 86,
+    apparel: 96,
+    'general-object': 108,
+  };
+  const categoryBase = baseCo2ByCategory[category] ?? baseCo2ByCategory['general-object'];
+  const co2Gram = Math.max(12, Math.round(categoryBase + (60 - ecoScore) * 0.8));
+
+  let suggestion = 'Choose durable, reusable options when practical.';
+  if (category === 'reusable-hydration' || category === 'reusable-container') {
+    suggestion = 'Keep using this reusable item and refill/repair before replacing.';
+  } else if (category === 'single-use-plastic-bottle') {
+    suggestion = 'Switch to a refillable stainless steel or glass bottle.';
+  } else if (category === 'single-use-item' || category === 'packaging') {
+    suggestion = 'Prefer reusable alternatives or lower-packaging options.';
+  } else if (category === 'electronic-device') {
+    suggestion = 'Extend device life with repair, and buy refurbished when possible.';
+  } else if (category === 'durable-household') {
+    suggestion = 'Maintain and repair this item to maximize its useful lifetime.';
+  } else if (category === 'apparel') {
+    suggestion = 'Choose durable fabrics and wear longer before replacing.';
+  }
+
+  const explanationParts = [
+    `User confirmed label: ${normalizedLabel}.`,
+    `Category inferred: ${category.replace(/-/g, ' ')}.`,
+    `Score adjusted using material/use-pattern heuristics for confirmed items.`,
+  ];
+
+  return {
+    title: normalizedLabel,
+    name: normalizedLabel,
+    category,
+    ecoScore,
+    co2Gram,
+    suggestion,
+    altRecommendation: suggestion,
+    explanation: explanationParts.join(' '),
+    scoreFactors: factors.length
+      ? factors
+      : [
+          {
+            code: 'confirmed_baseline',
+            label: 'Confirmed-item baseline',
+            detail: 'No strong heuristic signals were found; baseline confirmed-item score applied.',
+            delta: 0,
+          },
+        ],
+  };
 }
 
 function buildScoreBreakdown(result) {
@@ -206,11 +511,14 @@ function getAlternativeSuggestions(result) {
   const name = String(result.name ?? '').toLowerCase();
   const combined = `${category} ${name}`;
 
-  if (combined.includes('plastic bottle')) {
+  if (combined.includes('plastic bottle') || combined.includes('single-use-plastic-bottle')) {
     return ['Reusable Bottle', 'Glass Bottle', 'Insulated Reusable Bottle'];
   }
   if (combined.includes('paper cup') || combined.includes('coffee cup')) {
     return ['Refillable Coffee Cup', 'Stainless Steel Tumbler', 'Bring-your-own mug'];
+  }
+  if (combined.includes('reusable-hydration') || combined.includes('thermos') || combined.includes('flask')) {
+    return ['Keep and refill this bottle', 'Replace worn seals instead of replacing bottle', 'Use tap/filter refills'];
   }
   if (combined.includes('bag')) {
     return ['Cloth Bag', 'Jute Shopping Bag', 'Reuse old tote'];
@@ -220,6 +528,12 @@ function getAlternativeSuggestions(result) {
   }
   if (combined.includes('food packaging') || combined.includes('container')) {
     return ['Glass Lunch Container', 'Reusable steel lunchbox', 'Choose dine-in packaging'];
+  }
+  if (combined.includes('electronic-device') || combined.includes('laptop') || combined.includes('phone')) {
+    return ['Repair before replacing', 'Buy refurbished when possible', 'Recycle e-waste at certified drop-off'];
+  }
+  if (combined.includes('clothing') || combined.includes('shoe') || combined.includes('backpack')) {
+    return ['Choose durable materials', 'Repair or resole before replacing', 'Buy second-hand for similar items'];
   }
 
   const fallback = String(result.altRecommendation ?? '').trim();
@@ -234,7 +548,7 @@ function getGreenerAlternativeLabel(result) {
   const name = String(result.name ?? '').toLowerCase();
   const combined = `${category} ${name}`;
 
-  if (combined.includes('plastic bottle')) {
+  if (combined.includes('plastic bottle') || combined.includes('single-use-plastic-bottle')) {
     return 'Reusable Bottle';
   }
   if (combined.includes('paper cup') || combined.includes('coffee cup')) {
@@ -245,6 +559,9 @@ function getGreenerAlternativeLabel(result) {
   }
   if (combined.includes('disposable') || combined.includes('single-use') || combined.includes('single use')) {
     return 'Reusable Cutlery Set';
+  }
+  if (combined.includes('packaging')) {
+    return 'Low-packaging alternative';
   }
 
   return null;
@@ -267,23 +584,30 @@ export default function CameraScreen({
   const cameraProviderRef = useRef(null);
   const scrollViewRef = useRef(null);
   const resultCardYRef = useRef(0);
+  const lastCapturedImageRef = useRef('');
   const resultAnim = useRef(new Animated.Value(0)).current;
 
   const [selectedLabel, setSelectedLabel] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [inferenceEngine, setInferenceEngine] = useState(RECOGNITION_ENGINES.AUTO);
   const [loading, setLoading] = useState(false);
   const [loadingStageIndex, setLoadingStageIndex] = useState(0);
   const [result, setResult] = useState(null);
+  const [lastRuntime, setLastRuntime] = useState(null);
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [queuedRequests, setQueuedRequests] = useState([]);
+  const [customConfirmLabel, setCustomConfirmLabel] = useState('');
 
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = useMemo(() => createStyles(palette), [palette]);
-  const selectedLabelText =
-    LABEL_OPTIONS.find((option) => option.value === selectedLabel)?.label || LABEL_OPTIONS[0].label;
+  const selectedLabelMatch = LABEL_OPTIONS.find((option) => option.value === selectedLabel);
+  const selectedLabelText = selectedLabelMatch?.label || (selectedLabel ? selectedLabel : LABEL_OPTIONS[0].label);
   const manualLabelOptions = LABEL_OPTIONS.filter(
     (option) => option.value && option.value !== '__test_image__'
   );
+  const loadingStages = useMemo(() => {
+    return LOADING_STAGES_BY_ENGINE[inferenceEngine] || LOADING_STAGES_BY_ENGINE[RECOGNITION_ENGINES.AUTO];
+  }, [inferenceEngine]);
   const highImpactThreshold =
     typeof historyThresholds?.highImpactThreshold === 'number' &&
     Number.isFinite(historyThresholds.highImpactThreshold)
@@ -299,6 +623,7 @@ export default function CameraScreen({
     if (!result) {
       resultAnim.setValue(0);
       setIsBreakdownOpen(false);
+      setCustomConfirmLabel('');
       return;
     }
 
@@ -322,42 +647,27 @@ export default function CameraScreen({
       return undefined;
     }
     const interval = setInterval(() => {
-      setLoadingStageIndex((prev) => (prev + 1) % LOADING_STAGES.length);
+      setLoadingStageIndex((prev) => (prev + 1) % loadingStages.length);
     }, 900);
     return () => clearInterval(interval);
-  }, [loading]);
+  }, [loading, loadingStages]);
 
-  const loadingStage = LOADING_STAGES[loadingStageIndex];
+  const loadingStage = loadingStages[loadingStageIndex];
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
-  const executeRecognition = async (payload) => {
-    const response = await fetch(buildApiUrl(apiBaseUrl, '/api/recognize'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+  const executeRecognition = async (payload, preferredEngine = inferenceEngine) => {
+    return recognizeItem({
+      payload,
+      apiBaseUrl,
+      preferredEngine,
     });
-
-    let data = null;
-    try {
-      data = await response.json();
-    } catch (parseError) {
-      data = null;
-    }
-
-    if (!response.ok) {
-      const error = new Error(data?.message || `Request failed (${response.status})`);
-      error.code = response.status;
-      throw error;
-    }
-    return data;
   };
 
   const handleAnalyze = async (manualOverrideLabel = null) => {
     setLoading(true);
     setResult(null);
+    setLastRuntime(null);
 
     let payload = {
       detectedLabel: '',
@@ -365,13 +675,29 @@ export default function CameraScreen({
     };
 
     try {
+      const captureWithFallback = async () => {
+        try {
+          const captured = await cameraProviderRef.current?.captureImage();
+          if (captured) {
+            lastCapturedImageRef.current = captured;
+            return captured;
+          }
+        } catch {
+          // Fall through to bundled image fallback.
+        }
+        const fallback = await loadDefaultImageBase64();
+        lastCapturedImageRef.current = fallback;
+        return fallback;
+      };
 
       if (manualOverrideLabel) {
         payload.detectedLabel = manualOverrideLabel;
+        payload.imageBase64 = lastCapturedImageRef.current || (await captureWithFallback());
       } else if (selectedLabel === '__test_image__') {
         const imageBase64 = await loadDefaultImageBase64();
         payload.detectedLabel = '';
         payload.imageBase64 = imageBase64;
+        lastCapturedImageRef.current = imageBase64;
       } else if (!selectedLabel) {
         try {
           const imageBase64 = await cameraProviderRef.current?.captureImage();
@@ -379,19 +705,36 @@ export default function CameraScreen({
             throw new Error('No image was captured.');
           }
           payload.imageBase64 = imageBase64;
+          lastCapturedImageRef.current = imageBase64;
         } catch (captureError) {
           const imageBase64 = await loadDefaultImageBase64();
           payload.imageBase64 = imageBase64;
+          lastCapturedImageRef.current = imageBase64;
           showToast(
             `Camera capture unavailable (${captureError.message}). Using bundled test image instead.`
           );
         }
       } else {
         payload.detectedLabel = selectedLabel;
+        payload.imageBase64 = lastCapturedImageRef.current || (await captureWithFallback());
       }
 
-      const data = await executeRecognition(payload);
-      const singleUse = isSingleUseResult(data);
+      const { data, runtime } = await executeRecognition(payload, inferenceEngine);
+      const selectedManualLabel =
+        selectedLabel && selectedLabel !== '__test_image__' ? selectedLabel : '';
+      const manualConfirmedLabel = normalizeCandidateLabel(manualOverrideLabel || selectedManualLabel);
+      const normalizedData =
+        manualConfirmedLabel
+          ? {
+              ...data,
+              ...buildConfirmedProfile(manualConfirmedLabel, data),
+              confidence: Math.max(
+                Number.isFinite(Number(data?.confidence)) ? Number(data.confidence) : 0,
+                0.92
+              ),
+            }
+          : data;
+      const singleUse = isSingleUseResult(normalizedData);
       setGoalState((prev) => {
         const currentWeek = getWeekKey();
         const base =
@@ -409,7 +752,8 @@ export default function CameraScreen({
           bestStreak: nextBest,
         };
       });
-      setResult(data);
+      setResult(normalizedData);
+      setLastRuntime(runtime ?? null);
     } catch (fetchError) {
       const maybeOffline =
         !fetchError.code &&
@@ -419,6 +763,7 @@ export default function CameraScreen({
         const queued = {
           id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
           payload,
+          preferredEngine: inferenceEngine,
           createdAt: new Date().toISOString(),
         };
         setQueuedRequests((prev) => [queued, ...prev].slice(0, 20));
@@ -441,10 +786,15 @@ export default function CameraScreen({
       return;
     }
     setLoading(true);
+    setLastRuntime(null);
     const [next, ...rest] = queuedRequests;
     try {
-      const data = await executeRecognition(next.payload);
+      const { data, runtime } = await executeRecognition(
+        next.payload,
+        next.preferredEngine || RECOGNITION_ENGINES.AUTO
+      );
       setResult(data);
+      setLastRuntime(runtime ?? null);
       setQueuedRequests(rest);
       showToast('Queued scan processed successfully.', 'success');
     } catch (retryError) {
@@ -459,8 +809,53 @@ export default function CameraScreen({
     }
   };
 
+  const handleConfirmLabel = (value) => {
+    const normalized = normalizeCandidateLabel(value);
+    if (!normalized) {
+      showToast('Select or type a valid label first.', 'info');
+      return;
+    }
+    if (!result) {
+      showToast('No active scan result to confirm.', 'info');
+      return;
+    }
+
+    const predictedLabel = String(result?.name ?? '').trim();
+    const predictedConfidence = toFiniteNumber(result?.confidence);
+    const confirmedResult = {
+      ...result,
+      ...buildConfirmedProfile(normalized, result),
+      confidence: Math.max(predictedConfidence ?? 0, 0.92),
+    };
+
+    setSelectedLabel(normalized);
+    setCustomConfirmLabel(normalized);
+    setResult(confirmedResult);
+
+    submitTrainingSample({
+      apiBaseUrl,
+      userId,
+      imageBase64: lastCapturedImageRef.current,
+      predictedLabel,
+      predictedConfidence,
+      finalLabel: normalized,
+      sourceEngine: lastRuntime?.engine ?? inferenceEngine,
+      sourceRuntime: lastRuntime?.fallbackFrom
+        ? `fallback:${lastRuntime.fallbackFrom}`
+        : String(lastRuntime?.engine ?? inferenceEngine),
+      userConfirmed: true,
+    })
+      .then(() => {
+        showToast(`Confirmed as "${normalized}" and added to training set.`, 'success');
+      })
+      .catch(() => {
+        showToast(`Confirmed as "${normalized}". Training sync unavailable right now.`, 'info');
+      });
+  };
+
   const scoreTone = getScoreTone(result?.ecoScore, themeName);
   const confidenceTone = getConfidenceTone(result?.confidence, themeName);
+  const runtimeBadge = buildRuntimeBadge(lastRuntime, themeName);
   const catalogCoveragePct =
     typeof result?.catalogCoverage === 'number' && Number.isFinite(result.catalogCoverage)
       ? Math.round(result.catalogCoverage * 100)
@@ -472,15 +867,7 @@ export default function CameraScreen({
     if (!showLowConfidenceHelp || !result) {
       return manualLabelOptions.slice(0, 3);
     }
-    const hintText = `${result.name ?? ''} ${result.category ?? ''}`.toLowerCase();
-    const ranked = [...manualLabelOptions].sort((a, b) => {
-      const aTokens = a.value.toLowerCase().split(' ');
-      const bTokens = b.value.toLowerCase().split(' ');
-      const aScore = aTokens.filter((token) => hintText.includes(token)).length;
-      const bScore = bTokens.filter((token) => hintText.includes(token)).length;
-      return bScore - aScore;
-    });
-    return ranked.slice(0, 3);
+    return buildPredictionConfirmOptions(result, manualLabelOptions);
   }, [manualLabelOptions, result, showLowConfidenceHelp]);
   const scoreBreakdown = useMemo(() => {
     const apiRows = buildScoreBreakdownFromApi(result);
@@ -627,6 +1014,15 @@ export default function CameraScreen({
     showToast('Voice summary announced for accessibility.', 'info');
   };
 
+  const handleApplyCustomConfirmLabel = () => {
+    const normalized = normalizeCandidateLabel(customConfirmLabel);
+    if (!normalized) {
+      showToast('Type an item name first.', 'info');
+      return;
+    }
+    handleConfirmLabel(normalized);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
@@ -688,6 +1084,33 @@ export default function CameraScreen({
           ) : null}
 
           <Text style={styles.endpointText}>Active endpoint: {apiBaseUrl}</Text>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Inference Engine</Text>
+          <Text style={styles.sectionHint}>Choose where detection + summary runs.</Text>
+
+          <View style={styles.modeRow}>
+            {INFERENCE_OPTIONS.map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => setInferenceEngine(option.value)}
+                style={[styles.modeButton, inferenceEngine === option.value ? styles.modeButtonActive : null]}
+              >
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    inferenceEngine === option.value ? styles.modeButtonTextActive : null,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.endpointText}>Preferred engine: {getInferenceLabel(inferenceEngine)}</Text>
+          <Text style={styles.endpointText}>Last run: {buildRuntimeLabel(lastRuntime)}</Text>
         </View>
 
         <View style={styles.sectionCard}>
@@ -779,6 +1202,16 @@ export default function CameraScreen({
                 <View
                   style={[
                     styles.scoreBadge,
+                    { backgroundColor: runtimeBadge.bg, borderColor: runtimeBadge.border },
+                  ]}
+                >
+                  <Text style={[styles.scoreBadgeText, { color: runtimeBadge.text }]}>
+                    {runtimeBadge.label}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.scoreBadge,
                     { backgroundColor: scoreTone.bg, borderColor: scoreTone.border },
                   ]}
                 >
@@ -833,14 +1266,28 @@ export default function CameraScreen({
                     <Pressable
                       key={option.value}
                       style={styles.confirmChip}
-                      onPress={() => {
-                        setSelectedLabel(option.value);
-                        handleAnalyze(option.value);
-                      }}
+                      onPress={() => handleConfirmLabel(option.value)}
                     >
                       <Text style={styles.confirmChipText}>{option.label}</Text>
                     </Pressable>
                   ))}
+                </View>
+                <Text style={styles.confirmHint}>Not listed? Type your own label:</Text>
+                <View style={styles.confirmInputRow}>
+                  <TextInput
+                    value={customConfirmLabel}
+                    onChangeText={setCustomConfirmLabel}
+                    style={styles.confirmInput}
+                    placeholder="e.g. Stainless steel bottle, Laptop charger, Food container"
+                    placeholderTextColor={palette.textSecondary}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={handleApplyCustomConfirmLabel}
+                  />
+                  <Pressable style={styles.confirmApplyButton} onPress={handleApplyCustomConfirmLabel}>
+                    <Text style={styles.confirmApplyText}>Use this label</Text>
+                  </Pressable>
                 </View>
               </View>
             ) : null}
@@ -1288,6 +1735,11 @@ function createStyles(palette) {
       fontSize: 13,
       fontWeight: '700',
     },
+    confirmHint: {
+      color: palette.textSecondary,
+      fontSize: 12,
+      marginTop: 2,
+    },
     confirmChipRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -1303,6 +1755,34 @@ function createStyles(palette) {
     },
     confirmChipText: {
       color: palette.textPrimary,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    confirmInputRow: {
+      marginTop: 2,
+      gap: 8,
+    },
+    confirmInput: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.input,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      color: palette.textPrimary,
+      fontSize: 13,
+    },
+    confirmApplyButton: {
+      alignSelf: 'flex-start',
+      borderWidth: 1,
+      borderColor: palette.action,
+      backgroundColor: palette.actionMuted,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    confirmApplyText: {
+      color: palette.actionText,
       fontSize: 12,
       fontWeight: '700',
     },
