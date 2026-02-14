@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <React/RCTBridgeModule.h>
+#import "ETExecuTorchAdapter.h"
 
 #include <array>
 #include <algorithm>
@@ -199,10 +200,25 @@ class ETExecuTorchRuntimeBridge {
 public:
   ETExecuTorchRuntimeBridge()
   {
-    createFn_ = reinterpret_cast<ETCreateModelFn>(dlsym(RTLD_DEFAULT, ETBridgeCreateSymbol.UTF8String));
-    runFn_ = reinterpret_cast<ETRunInferenceFn>(dlsym(RTLD_DEFAULT, ETBridgeRunSymbol.UTF8String));
-    destroyFn_ = reinterpret_cast<ETDestroyModelFn>(dlsym(RTLD_DEFAULT, ETBridgeDestroySymbol.UTF8String));
-    freeCStringFn_ = reinterpret_cast<ETFreeCStringFn>(dlsym(RTLD_DEFAULT, ETBridgeFreeCStringSymbol.UTF8String));
+    // Prefer direct symbol addresses to keep adapter symbols linked into the final binary.
+    createFn_ = &et_ecolens_create_model;
+    runFn_ = &et_ecolens_run_inference;
+    destroyFn_ = &et_ecolens_destroy_model;
+    freeCStringFn_ = &et_ecolens_free_cstring;
+
+    // Fallback to dlsym to support swapping adapter implementation from an external binary.
+    if (createFn_ == nullptr) {
+      createFn_ = reinterpret_cast<ETCreateModelFn>(dlsym(RTLD_DEFAULT, ETBridgeCreateSymbol.UTF8String));
+    }
+    if (runFn_ == nullptr) {
+      runFn_ = reinterpret_cast<ETRunInferenceFn>(dlsym(RTLD_DEFAULT, ETBridgeRunSymbol.UTF8String));
+    }
+    if (destroyFn_ == nullptr) {
+      destroyFn_ = reinterpret_cast<ETDestroyModelFn>(dlsym(RTLD_DEFAULT, ETBridgeDestroySymbol.UTF8String));
+    }
+    if (freeCStringFn_ == nullptr) {
+      freeCStringFn_ = reinterpret_cast<ETFreeCStringFn>(dlsym(RTLD_DEFAULT, ETBridgeFreeCStringSymbol.UTF8String));
+    }
   }
 
   ~ETExecuTorchRuntimeBridge()

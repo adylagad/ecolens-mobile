@@ -14,6 +14,7 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		E1A0C0012F00000100ABC123 /* ExecuTorchRecognizer.mm in Sources */ = {isa = PBXBuildFile; fileRef = E1A0C0002F00000100ABC123 /* ExecuTorchRecognizer.mm */; };
+		E1A0C0112F00000200ABC123 /* ETExecuTorchAdapter.mm in Sources */ = {isa = PBXBuildFile; fileRef = E1A0C0102F00000200ABC123 /* ETExecuTorchAdapter.mm */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -29,6 +30,7 @@
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		D20BAD340B155039A4482F6A /* Pods-ecolensmobile.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ecolensmobile.debug.xcconfig"; path = "Target Support Files/Pods-ecolensmobile/Pods-ecolensmobile.debug.xcconfig"; sourceTree = "<group>"; };
 		E1A0C0002F00000100ABC123 /* ExecuTorchRecognizer.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExecuTorchRecognizer.mm; path = ecolensmobile/ExecuTorchRecognizer.mm; sourceTree = "<group>"; };
+		E1A0C0102F00000200ABC123 /* ETExecuTorchAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ETExecuTorchAdapter.mm; path = ecolensmobile/ETExecuTorchAdapter.mm; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = ecolensmobile/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* ecolensmobile-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "ecolensmobile-Bridging-Header.h"; path = "ecolensmobile/ecolensmobile-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -50,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				E1A0C0102F00000200ABC123 /* ETExecuTorchAdapter.mm */,
 				E1A0C0002F00000100ABC123 /* ExecuTorchRecognizer.mm */,
 				F11748442D0722820044C1D9 /* ecolensmobile-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
@@ -326,6 +329,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1A0C0112F00000200ABC123 /* ETExecuTorchAdapter.mm in Sources */,
 				E1A0C0012F00000100ABC123 /* ExecuTorchRecognizer.mm in Sources */,
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
 				0F5581CCB57DD2A1DC31DAF5 /* ExpoModulesProvider.swift in Sources */,
@@ -346,6 +350,7 @@
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
+					"ET_ENABLE_EXECUTORCH_CPP=1",
 					"FB_SONARKIT_ENABLED=1",
 				);
 				INFOPLIST_FILE = ecolensmobile/Info.plist;
@@ -379,6 +384,10 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = ecolensmobile/ecolensmobile.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"ET_ENABLE_EXECUTORCH_CPP=1",
+				);
 				INFOPLIST_FILE = ecolensmobile/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

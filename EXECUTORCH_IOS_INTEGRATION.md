@@ -62,6 +62,18 @@ warmup(config: {
 - `et_ecolens_destroy_model(void* handle)`
 - `et_ecolens_free_cstring(const char* ptr)` (optional but recommended)
 
+Current implementation location:
+- `ios/ecolensmobile/ETExecuTorchAdapter.mm` (exports all required symbols)
+- This file now contains an ExecuTorch C++ inference path guarded by `ET_ENABLE_EXECUTORCH_CPP`.
+- Default builds keep fallback heuristic inference enabled when ExecuTorch C++ headers/libs are not linked.
+
+To enable native ExecuTorch C++ path:
+- Add preprocessor define `ET_ENABLE_EXECUTORCH_CPP=1` for the iOS target.
+- Ensure ExecuTorch headers are available:
+  - `executorch/extension/module/module.h`
+  - `executorch/extension/tensor/tensor.h`
+- Ensure ExecuTorch runtime libs are linked for iOS.
+
 The run function is expected to return a JSON string with fields such as:
 
 - `name` or `label`
