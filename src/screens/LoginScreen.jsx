@@ -60,6 +60,10 @@ function GoogleSignInButton({ styles, palette, onLogin, showToast }) {
         return;
       }
 
+      if (__DEV__) {
+        console.log('[AuthDebug] GOOGLE_ID_TOKEN', idToken);
+      }
+
       setLoadingProfile(true);
       try {
         const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
