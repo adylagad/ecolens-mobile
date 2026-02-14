@@ -33,6 +33,7 @@ const DEFAULT_HISTORY_THRESHOLDS = {
   greenerThreshold: 85,
 };
 const TOAST_DURATION_MS = 3000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 const EMPTY_HISTORY_STATS = {
   avgScore: null,
   highImpactCount: 0,
@@ -59,8 +60,51 @@ function withAuthHeader(headers = {}, authToken = '') {
   };
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  let timeoutId = null;
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort();
+        const timeoutError = new Error('Request timed out.');
+        timeoutError.code = 'REQUEST_TIMEOUT';
+        reject(timeoutError);
+      }, timeoutMs);
+    });
+    return await Promise.race([fetch(url, {
+      ...options,
+      signal: controller.signal,
+    }), timeoutPromise]);
+  } catch (error) {
+    if (error?.name === 'AbortError' || error?.code === 'REQUEST_TIMEOUT') {
+      const timeoutError = new Error('Request timed out.');
+      timeoutError.code = 'REQUEST_TIMEOUT';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function readJsonSafely(response) {
+  try {
+    const bodyText = await response.text();
+    if (!bodyText) {
+      return null;
+    }
+    return JSON.parse(bodyText);
+  } catch {
+    return null;
+  }
+}
+
 function resolveHistoryErrorMessage(error, statusCode, apiMode, apiBaseUrl) {
   const raw = String(error?.message ?? '').trim();
+  if (error?.code === 'REQUEST_TIMEOUT' || raw.toLowerCase().includes('timed out')) {
+    return 'History request timed out. Please retry.';
+  }
   if (
     raw.includes('Network request failed') ||
     raw.includes('Failed to fetch') ||
@@ -107,6 +151,8 @@ export default function App() {
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = createStyles(palette, themeName);
   const toastTimerRef = useRef(null);
+  const historyRequestInFlightRef = useRef(false);
+  const guestHistoryHintShownRef = useRef(false);
   const toastAnim = useRef(new Animated.Value(0)).current;
 
   const showToast = (message, type = 'info') => {
@@ -169,42 +215,42 @@ export default function App() {
   }, []);
 
   const loadHistory = async () => {
+    if (historyRequestInFlightRef.current) {
+      return;
+    }
     if (!authToken) {
+      historyRequestInFlightRef.current = false;
       setHistoryLoading(false);
       return;
     }
+    historyRequestInFlightRef.current = true;
     setHistoryLoading(true);
     let statusCode = null;
     try {
       const historyUrl = buildApiUrl(apiBaseUrl, '/api/history');
       const statsUrl = buildApiUrl(apiBaseUrl, '/api/history/stats');
-      const historyResponse = await fetch(historyUrl, {
+      const historyResponse = await fetchWithTimeout(historyUrl, {
         headers: withAuthHeader({}, authToken),
       });
 
       if (historyResponse.ok) {
-        const historyData = await historyResponse.json();
+        const historyData = await readJsonSafely(historyResponse);
         setScanHistory(Array.isArray(historyData) ? historyData : []);
       } else {
         statusCode = historyResponse.status;
-        let backendMessage = '';
-        try {
-          const errorBody = await historyResponse.json();
-          backendMessage = String(errorBody?.message ?? '').trim();
-        } catch (parseError) {
-          backendMessage = '';
-        }
+        const errorBody = await readJsonSafely(historyResponse);
+        const backendMessage = String(errorBody?.message ?? '').trim();
         throw new Error(
           backendMessage || `History request failed (${historyResponse.status})`
         );
       }
 
       try {
-        const statsResponse = await fetch(statsUrl, {
+        const statsResponse = await fetchWithTimeout(statsUrl, {
           headers: withAuthHeader({}, authToken),
         });
         if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
+          const statsData = await readJsonSafely(statsResponse);
           setHistoryStats({
             avgScore: statsData?.avgScore ?? null,
             highImpactCount: statsData?.highImpactCount ?? 0,
@@ -225,6 +271,7 @@ export default function App() {
     } catch (error) {
       showToast(resolveHistoryErrorMessage(error, statusCode, apiMode, apiBaseUrl), 'error');
     } finally {
+      historyRequestInFlightRef.current = false;
       setHistoryLoading(false);
     }
   };
@@ -246,6 +293,18 @@ export default function App() {
     }
     loadHistory();
   }, [activeTab, apiBaseUrl, authToken]);
+
+  useEffect(() => {
+    if (activeTab !== 'history') {
+      guestHistoryHintShownRef.current = false;
+      return;
+    }
+    const provider = String(authUser?.provider ?? '').trim().toLowerCase();
+    if (!authToken && provider === 'guest' && !guestHistoryHintShownRef.current) {
+      guestHistoryHintShownRef.current = true;
+      showToast('Guest mode cannot load cloud history. Sign in with Google.', 'info');
+    }
+  }, [activeTab, authToken, authUser, showToast]);
 
   return (
     <SafeAreaView style={styles.appRoot}>

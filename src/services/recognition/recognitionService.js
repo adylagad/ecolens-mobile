@@ -42,6 +42,37 @@ function parseConfidenceValue(result) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+async function fallbackToBackendOrThrow({
+  payload,
+  apiBaseUrl,
+  authToken,
+  onDeviceConfidence,
+  fallbackThreshold,
+  reasonPrefix = 'On-device confidence',
+}) {
+  try {
+    const fallback = await recognizeWithBackend({ payload, apiBaseUrl, authToken });
+    return {
+      ...fallback,
+      runtime: {
+        ...fallback.runtime,
+        fallbackFrom: RECOGNITION_ENGINES.ON_DEVICE,
+        fallbackReason: `${reasonPrefix} ${onDeviceConfidence.toFixed(3)} below threshold ${fallbackThreshold.toFixed(3)}`,
+        onDeviceConfidence,
+        onDeviceFallbackThreshold: fallbackThreshold,
+      },
+    };
+  } catch (backendFallbackError) {
+    const fallbackError = new Error(
+      backendFallbackError?.message
+        ? `Low-confidence on-device result rejected (${onDeviceConfidence.toFixed(3)}). Backend fallback failed: ${backendFallbackError.message}`
+        : `Low-confidence on-device result rejected (${onDeviceConfidence.toFixed(3)}). Backend fallback failed.`
+    );
+    fallbackError.code = backendFallbackError?.code ?? 'BACKEND_FALLBACK_FAILED';
+    throw fallbackError;
+  }
+}
+
 export async function recognizeItem({
   payload,
   apiBaseUrl,
@@ -55,7 +86,19 @@ export async function recognizeItem({
   }
 
   if (engine === RECOGNITION_ENGINES.ON_DEVICE) {
-    return recognizeOnDevice({ payload });
+    const onDeviceResult = await recognizeOnDevice({ payload });
+    const onDeviceConfidence = parseConfidenceValue(onDeviceResult);
+    const fallbackThreshold = parseFallbackThreshold();
+    if (onDeviceConfidence === null || onDeviceConfidence >= fallbackThreshold) {
+      return onDeviceResult;
+    }
+    return fallbackToBackendOrThrow({
+      payload,
+      apiBaseUrl,
+      authToken,
+      onDeviceConfidence,
+      fallbackThreshold,
+    });
   }
 
   if (Platform.OS === 'ios') {
@@ -70,32 +113,13 @@ export async function recognizeItem({
         return onDeviceResult;
       }
 
-      try {
-        const fallback = await recognizeWithBackend({ payload, apiBaseUrl, authToken });
-        return {
-          ...fallback,
-          runtime: {
-            ...fallback.runtime,
-            fallbackFrom: RECOGNITION_ENGINES.ON_DEVICE,
-            fallbackReason: `On-device confidence ${onDeviceConfidence.toFixed(3)} below threshold ${fallbackThreshold.toFixed(3)}`,
-            onDeviceConfidence,
-            onDeviceFallbackThreshold: fallbackThreshold,
-          },
-        };
-      } catch (backendFallbackError) {
-        return {
-          ...onDeviceResult,
-          runtime: {
-            ...onDeviceResult.runtime,
-            fallbackAttempted: true,
-            fallbackFrom: RECOGNITION_ENGINES.ON_DEVICE,
-            fallbackReason: `On-device confidence ${onDeviceConfidence.toFixed(3)} below threshold ${fallbackThreshold.toFixed(3)}`,
-            fallbackError: String(backendFallbackError?.message ?? 'Backend fallback failed'),
-            onDeviceConfidence,
-            onDeviceFallbackThreshold: fallbackThreshold,
-          },
-        };
-      }
+      return fallbackToBackendOrThrow({
+        payload,
+        apiBaseUrl,
+        authToken,
+        onDeviceConfidence,
+        fallbackThreshold,
+      });
     } catch (onDeviceError) {
       const fallback = await recognizeWithBackend({ payload, apiBaseUrl, authToken });
       return {
