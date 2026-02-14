@@ -15,6 +15,7 @@ import {
 import CameraProvider from '../clients/CameraProvider';
 import { TEST_IMAGE_BASE64 } from '../config/testImageBase64';
 import { RECOGNITION_ENGINES, recognizeItem } from '../services/recognition/recognitionService';
+import { submitTrainingSample } from '../services/training/trainingSampleService';
 import { THEMES } from '../theme';
 import { buildApiUrl } from '../utils/apiUrl';
 
@@ -181,6 +182,14 @@ function normalizeCandidateLabel(value) {
     .split(' ')
     .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
     .join(' ');
+}
+
+function toFiniteNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  const parsed = Number.parseFloat(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function buildPredictionConfirmOptions(result, manualOptions) {
@@ -375,9 +384,8 @@ function buildConfirmedProfile(label, previousResult = {}) {
     `Score adjusted using material/use-pattern heuristics for confirmed items.`,
   ];
 
-  const previousTitle = String(previousResult?.title ?? '').trim();
   return {
-    title: previousTitle || 'On-device (ExecuTorch)',
+    title: normalizedLabel,
     name: normalizedLabel,
     category,
     ecoScore,
@@ -801,6 +809,50 @@ export default function CameraScreen({
     }
   };
 
+  const handleConfirmLabel = (value) => {
+    const normalized = normalizeCandidateLabel(value);
+    if (!normalized) {
+      showToast('Select or type a valid label first.', 'info');
+      return;
+    }
+    if (!result) {
+      showToast('No active scan result to confirm.', 'info');
+      return;
+    }
+
+    const predictedLabel = String(result?.name ?? '').trim();
+    const predictedConfidence = toFiniteNumber(result?.confidence);
+    const confirmedResult = {
+      ...result,
+      ...buildConfirmedProfile(normalized, result),
+      confidence: Math.max(predictedConfidence ?? 0, 0.92),
+    };
+
+    setSelectedLabel(normalized);
+    setCustomConfirmLabel(normalized);
+    setResult(confirmedResult);
+
+    submitTrainingSample({
+      apiBaseUrl,
+      userId,
+      imageBase64: lastCapturedImageRef.current,
+      predictedLabel,
+      predictedConfidence,
+      finalLabel: normalized,
+      sourceEngine: lastRuntime?.engine ?? inferenceEngine,
+      sourceRuntime: lastRuntime?.fallbackFrom
+        ? `fallback:${lastRuntime.fallbackFrom}`
+        : String(lastRuntime?.engine ?? inferenceEngine),
+      userConfirmed: true,
+    })
+      .then(() => {
+        showToast(`Confirmed as "${normalized}" and added to training set.`, 'success');
+      })
+      .catch(() => {
+        showToast(`Confirmed as "${normalized}". Training sync unavailable right now.`, 'info');
+      });
+  };
+
   const scoreTone = getScoreTone(result?.ecoScore, themeName);
   const confidenceTone = getConfidenceTone(result?.confidence, themeName);
   const runtimeBadge = buildRuntimeBadge(lastRuntime, themeName);
@@ -968,9 +1020,7 @@ export default function CameraScreen({
       showToast('Type an item name first.', 'info');
       return;
     }
-    setSelectedLabel(normalized);
-    setCustomConfirmLabel(normalized);
-    handleAnalyze(normalized);
+    handleConfirmLabel(normalized);
   };
 
   return (
@@ -1216,10 +1266,7 @@ export default function CameraScreen({
                     <Pressable
                       key={option.value}
                       style={styles.confirmChip}
-                      onPress={() => {
-                        setSelectedLabel(option.value);
-                        handleAnalyze(option.value);
-                      }}
+                      onPress={() => handleConfirmLabel(option.value)}
                     >
                       <Text style={styles.confirmChipText}>{option.label}</Text>
                     </Pressable>

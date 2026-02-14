@@ -109,6 +109,11 @@ The run function is expected to return a JSON string with fields such as:
 
 - On-device mode currently throws a clear error until native module is linked.
 - Auto mode is safe for demos because it falls back to backend automatically.
+- Confirmed low-confidence labels are now sent to backend training APIs (`/api/training/samples`) with:
+  - captured image base64
+  - predicted label/confidence
+  - user-confirmed final label
+  - inferred taxonomy leaf
 - This repo currently ignores `/ios` and `/android` in `.gitignore`; if you want native bridge code committed, remove those ignore entries.
 - JS runtime config is passed from env vars:
   - `EXPO_PUBLIC_EXECUTORCH_MODEL_PATH`
@@ -126,3 +131,18 @@ The run function is expected to return a JSON string with fields such as:
   1. Add `model.pte` and `labels.json` to iOS app bundle resources.
   2. Copy `.env.example` to `.env.local` and adjust values if needed.
   3. Rebuild iOS app (`npx expo run:ios`) so env vars are baked in.
+
+## Training Dataset Pipeline
+
+Backend endpoints added for MobileNet fine-tuning dataset creation:
+
+- `GET /api/training/taxonomy` -> taxonomy JSON (current version includes 101 classes)
+- `POST /api/training/samples` -> save user-confirmed labeled sample
+- `GET /api/training/samples` -> inspect collected samples
+- `GET /api/training/export` -> export train-ready sample manifest (optionally with images)
+
+Example export call:
+
+```bash
+curl "http://<backend-host>:8080/api/training/export?limit=2000&confirmedOnly=true&includeImages=true"
+```
