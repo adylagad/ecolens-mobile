@@ -21,6 +21,7 @@ function normalizeConfidence(value) {
 export async function submitTrainingSample({
   apiBaseUrl,
   userId,
+  authToken,
   imageBase64,
   predictedLabel,
   predictedConfidence,
@@ -54,6 +55,7 @@ export async function submitTrainingSample({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(toTrimmedString(authToken) ? { Authorization: `Bearer ${toTrimmedString(authToken)}` } : {}),
     },
     body: JSON.stringify(payload),
   });

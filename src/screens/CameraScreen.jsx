@@ -938,14 +938,24 @@ export default function CameraScreen({
       ...buildConfirmedProfile(normalized, result),
       confidence: Math.max(predictedConfidence ?? 0, 0.92),
     };
+    const capturedImageBase64 = String(lastCapturedImageRef.current ?? '').trim();
 
     setSelectedLabel(normalized);
     setCustomConfirmLabel(normalized);
     setResult(confirmedResult);
 
+    if (!capturedImageBase64) {
+      showToast(
+        `Confirmed as "${normalized}", but no captured image was available for training sample upload.`,
+        'info'
+      );
+      return;
+    }
+
     submitTrainingSample({
       apiBaseUrl,
-      imageBase64: lastCapturedImageRef.current,
+      authToken,
+      imageBase64: capturedImageBase64,
       predictedLabel,
       predictedConfidence,
       finalLabel: normalized,
@@ -971,8 +981,21 @@ export default function CameraScreen({
       ? Math.round(result.catalogCoverage * 100)
       : null;
   const catalogMatchStrategy = String(result?.catalogMatchStrategy ?? '').trim();
+  const displayedConfidence = toFiniteNumber(result?.confidence);
+  const onDeviceConfidence = toFiniteNumber(lastRuntime?.onDeviceConfidence);
+  const onDeviceFallbackThreshold = toFiniteNumber(lastRuntime?.onDeviceFallbackThreshold);
+  const runtimeLowConfidence = onDeviceConfidence !== null && onDeviceConfidence < (
+    onDeviceFallbackThreshold !== null ? onDeviceFallbackThreshold : 0.6
+  );
   const showLowConfidenceHelp =
-    typeof result?.confidence === 'number' && result.confidence < 0.6 && !loading;
+    !loading && (
+      (displayedConfidence !== null && displayedConfidence < 0.6) ||
+      runtimeLowConfidence ||
+      Boolean(lastRuntime?.degradedToOnDevice)
+    );
+  const lowConfidenceTitle = runtimeLowConfidence
+    ? `Low on-device confidence (${onDeviceConfidence?.toFixed(3)}). Confirm the item:`
+    : 'Low confidence. Confirm the item:';
   const suggestedConfirmLabels = useMemo(() => {
     if (!showLowConfidenceHelp || !result) {
       return manualLabelOptions.slice(0, 3);
@@ -1382,7 +1405,7 @@ export default function CameraScreen({
 
             {showLowConfidenceHelp ? (
               <View style={styles.confirmBlock}>
-                <Text style={styles.confirmTitle}>Low confidence. Confirm the item:</Text>
+                <Text style={styles.confirmTitle}>{lowConfidenceTitle}</Text>
                 <View style={styles.confirmChipRow}>
                   {suggestedConfirmLabels.map((option) => (
                     <Pressable
@@ -1394,6 +1417,11 @@ export default function CameraScreen({
                     </Pressable>
                   ))}
                 </View>
+                {runtimeLowConfidence ? (
+                  <Text style={styles.confirmHint}>
+                    Confirming the label here writes a training sample for future model retraining.
+                  </Text>
+                ) : null}
                 <Text style={styles.confirmHint}>Not listed? Type your own label:</Text>
                 <View style={styles.confirmInputRow}>
                   <TextInput
