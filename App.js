@@ -40,22 +40,6 @@ const EMPTY_HISTORY_STATS = {
   ...DEFAULT_HISTORY_THRESHOLDS,
 };
 
-function resolveUserId(authUser) {
-  if (!authUser) {
-    return '';
-  }
-  if (authUser.email && String(authUser.email).trim()) {
-    return String(authUser.email).trim().toLowerCase();
-  }
-  if (authUser.provider && String(authUser.provider).trim()) {
-    return String(authUser.provider).trim().toLowerCase();
-  }
-  if (authUser.name && String(authUser.name).trim()) {
-    return String(authUser.name).trim().toLowerCase().replace(/\s+/g, '-');
-  }
-  return 'anonymous';
-}
-
 function resolveAuthToken(authUser) {
   if (!authUser) {
     return '';
@@ -119,7 +103,6 @@ export default function App() {
   const insets = useSafeAreaInsets();
   const themeName = colorScheme === 'light' ? 'light' : 'dark';
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
-  const userId = resolveUserId(authUser);
   const authToken = resolveAuthToken(authUser);
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = createStyles(palette, themeName);
@@ -186,16 +169,15 @@ export default function App() {
   }, []);
 
   const loadHistory = async () => {
-    if (!userId || !authToken) {
+    if (!authToken) {
       setHistoryLoading(false);
       return;
     }
     setHistoryLoading(true);
     let statusCode = null;
     try {
-      const userQuery = `userId=${encodeURIComponent(userId)}`;
-      const historyUrl = `${buildApiUrl(apiBaseUrl, '/api/history')}?${userQuery}`;
-      const statsUrl = `${buildApiUrl(apiBaseUrl, '/api/history/stats')}?${userQuery}`;
+      const historyUrl = buildApiUrl(apiBaseUrl, '/api/history');
+      const statsUrl = buildApiUrl(apiBaseUrl, '/api/history/stats');
       const historyResponse = await fetch(historyUrl, {
         headers: withAuthHeader({}, authToken),
       });
@@ -248,7 +230,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!userId || !authToken) {
+    if (!authToken) {
       setScanHistory([]);
       setHistoryStats(EMPTY_HISTORY_STATS);
       return;
@@ -256,14 +238,14 @@ export default function App() {
     // Keep history scoped to the selected backend mode (prod/dev) and user.
     setScanHistory([]);
     setHistoryStats(EMPTY_HISTORY_STATS);
-  }, [apiBaseUrl, authToken, userId]);
+  }, [apiBaseUrl, authToken]);
 
   useEffect(() => {
-    if (activeTab !== 'history' || !userId || !authToken) {
+    if (activeTab !== 'history' || !authToken) {
       return;
     }
     loadHistory();
-  }, [activeTab, apiBaseUrl, authToken, userId]);
+  }, [activeTab, apiBaseUrl, authToken]);
 
   return (
     <SafeAreaView style={styles.appRoot}>
@@ -324,7 +306,6 @@ export default function App() {
             devBaseUrl={devBaseUrl}
             setDevBaseUrl={setDevBaseUrl}
             apiBaseUrl={apiBaseUrl}
-            userId={userId}
             authToken={authToken}
             themeName={themeName}
             historyThresholds={historyStats}
