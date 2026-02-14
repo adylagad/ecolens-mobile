@@ -11,7 +11,7 @@ This project now has a JS-level inference engine selector and service abstractio
 - Native bridge stub:
   - `src/native/ExecuTorchRecognizer.js`
 - iOS native module skeleton:
-  - `ios/ecolensmobile/ExecuTorchRecognizer.m`
+  - `ios/ecolensmobile/ExecuTorchRecognizer.mm`
   - wired in `ios/ecolensmobile.xcodeproj/project.pbxproj`
 - Recognition service layer:
   - `src/services/recognition/backendRecognitionService.js`
@@ -34,8 +34,23 @@ npx expo prebuild --platform ios
 detectAndSummarize(payload: {
   imageBase64?: string,
   detectedLabel?: string,
-  confidence?: number
+  confidence?: number,
+  runtimeConfig?: {
+    modelPath?: string,
+    tokenizerPath?: string,
+    preset?: string
+  }
 }) -> Promise<object>
+```
+
+Also exposed for preloading:
+
+```text
+warmup(config: {
+  modelPath?: string,
+  tokenizerPath?: string,
+  preset?: string
+}) -> Promise<{ ok: boolean }>
 ```
 
 3. The returned object should match current result usage in `CameraScreen`:
@@ -49,7 +64,7 @@ detectAndSummarize(payload: {
 - `explanation`
 
 4. Integrate ExecuTorch runtime + model files in iOS project, then use EAS/custom dev client for testing.
-5. Replace stub response in `ios/ecolensmobile/ExecuTorchRecognizer.m` with real model output.
+5. Replace scaffold inference in `ios/ecolensmobile/ExecuTorchRecognizer.mm` with real model output.
 
 ## Notes
 
