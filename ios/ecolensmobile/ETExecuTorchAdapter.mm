@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import "ETExecuTorchAdapter.h"
+#import <TargetConditionals.h>
 
 #include <cmath>
 #include <cctype>
@@ -15,7 +16,7 @@
 #define ET_ENABLE_EXECUTORCH_CPP 0
 #endif
 
-#if ET_ENABLE_EXECUTORCH_CPP && __has_include(<executorch/extension/module/module.h>) && __has_include(<executorch/extension/tensor/tensor.h>)
+#if ET_ENABLE_EXECUTORCH_CPP && !TARGET_OS_SIMULATOR && __has_include(<executorch/extension/module/module.h>) && __has_include(<executorch/extension/tensor/tensor.h>)
 #define ET_HAS_EXECUTORCH_CPP 1
 #include <executorch/extension/module/module.h>
 #include <executorch/extension/tensor/tensor.h>
@@ -160,7 +161,11 @@ static std::string runExecuTorchInference(AdapterModel *model,
     return std::string();
   }
 
-  const std::vector<int64_t> sizes = {1, 3, static_cast<int64_t>(height), static_cast<int64_t>(width)};
+  const std::vector<executorch::aten::SizesType> sizes = {
+      static_cast<executorch::aten::SizesType>(1),
+      static_cast<executorch::aten::SizesType>(3),
+      static_cast<executorch::aten::SizesType>(height),
+      static_cast<executorch::aten::SizesType>(width)};
   auto inputTensor = executorch::extension::from_blob(const_cast<float *>(input), sizes);
   if (!inputTensor) {
     setError(errorMessage, "Failed to create input tensor for ExecuTorch.");

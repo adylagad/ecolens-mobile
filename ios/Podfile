@@ -60,5 +60,35 @@ target 'ecolensmobile' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_configuration|
+        # Ensure simulator builds are not fully excluded.
+        build_configuration.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+      end
+    end
+
+    # ExecuTorch 0.2.0 ships iOS device static archives; keep full linkage on
+    # iphoneos and strip ExecuTorch archives from simulator link flags.
+    executorch_lib_regex = / -l"(backend_coreml_ios|backend_mps_ios|backend_xnnpack_ios|executorch_ios|kernels_custom_ios|kernels_optimized_ios|kernels_portable_ios|kernels_quantized_ios)"/
+    executorch_force_load_regex = / -force_load \$\(PODS_ROOT\)\/Executorch\/install\/lib\/lib(?:backend_coreml_ios|backend_mps_ios|backend_xnnpack_ios|executorch_ios|kernels_custom_ios|kernels_optimized_ios|kernels_portable_ios|kernels_quantized_ios)\.a/
+    target_support_files = File.join(installer.sandbox.root.to_s, 'Target Support Files', 'Pods-ecolensmobile')
+
+    Dir.glob(File.join(target_support_files, 'Pods-ecolensmobile.*.xcconfig')).each do |xcconfig_path|
+      xcconfig = File.read(xcconfig_path)
+      ldflags_match = xcconfig.match(/^OTHER_LDFLAGS = (.+)$/)
+      next if ldflags_match.nil?
+
+      device_ldflags = ldflags_match[1]
+      simulator_ldflags = device_ldflags
+                          .gsub(executorch_lib_regex, '')
+                          .gsub(executorch_force_load_regex, '')
+
+      xcconfig.sub!(/^OTHER_LDFLAGS = .+$/, "OTHER_LDFLAGS = #{simulator_ldflags}")
+      xcconfig.gsub!(/^OTHER_LDFLAGS\[sdk=iphoneos\*\] = .+\n/, '')
+      xcconfig.sub!(/^OTHER_LDFLAGS = .+$/, "\\0\nOTHER_LDFLAGS[sdk=iphoneos*] = #{device_ldflags}")
+
+      File.write(xcconfig_path, xcconfig)
+    end
   end
 end

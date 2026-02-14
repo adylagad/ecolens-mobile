@@ -73,6 +73,9 @@ To enable native ExecuTorch C++ path:
   - `executorch/extension/module/module.h`
   - `executorch/extension/tensor/tensor.h`
 - Ensure ExecuTorch runtime libs are linked for iOS.
+- Current setup intentionally uses fallback path on `iphonesimulator`:
+  - ExecuTorch C++ path is compiled only for non-simulator builds.
+  - `Podfile` post-install rewrites generated pods `.xcconfig` so device keeps full ExecuTorch linkage and simulator strips device-only archives.
 
 The run function is expected to return a JSON string with fields such as:
 
