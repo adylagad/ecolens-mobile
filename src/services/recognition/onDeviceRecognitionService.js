@@ -2,6 +2,33 @@ import { detectAndSummarize, isExecuTorchAvailable, warmup } from '../../native/
 
 let hasWarmupRun = false;
 
+function parseTimeoutMs() {
+  const raw = String(process.env?.EXPO_PUBLIC_ONDEVICE_TIMEOUT_MS ?? '').trim();
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 12000;
+  }
+  return parsed;
+}
+
+async function withTimeout(promise, timeoutMs, message, code) {
+  let timeoutId = null;
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const timeoutError = new Error(message);
+        timeoutError.code = code;
+        reject(timeoutError);
+      }, timeoutMs);
+    });
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 function readNumberEnv(name, fallback) {
   const raw = String(process.env?.[name] ?? '').trim();
   if (!raw) {
@@ -47,17 +74,27 @@ export async function recognizeOnDevice({ payload }) {
   const runtimeConfig = buildRuntimeConfig();
   if (!hasWarmupRun) {
     try {
-      await warmup(runtimeConfig);
+      await withTimeout(
+        warmup(runtimeConfig),
+        6000,
+        'On-device warmup timed out.',
+        'ON_DEVICE_WARMUP_TIMEOUT'
+      );
       hasWarmupRun = true;
     } catch (warmupError) {
       // Continue to direct inference; native module also warms up per-request.
     }
   }
 
-  const data = await detectAndSummarize({
-    ...payload,
-    runtimeConfig,
-  });
+  const data = await withTimeout(
+    detectAndSummarize({
+      ...payload,
+      runtimeConfig,
+    }),
+    parseTimeoutMs(),
+    'On-device recognition timed out. Please try again.',
+    'ON_DEVICE_TIMEOUT'
+  );
   if (!data || typeof data !== 'object') {
     const error = new Error('On-device recognizer returned an invalid response payload.');
     error.code = 'ON_DEVICE_INVALID_RESPONSE';

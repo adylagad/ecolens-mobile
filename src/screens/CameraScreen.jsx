@@ -102,6 +102,12 @@ function buildRuntimeLabel(runtime) {
   if (!runtime || typeof runtime !== 'object') {
     return 'No inference yet';
   }
+  if (runtime.engine === 'manual-label') {
+    return 'Manual label';
+  }
+  if (runtime.engine === RECOGNITION_ENGINES.ON_DEVICE && runtime.degradedToOnDevice) {
+    return 'On-device (backend fallback unavailable)';
+  }
   const engine = runtime.engine === RECOGNITION_ENGINES.ON_DEVICE ? 'On-device' : 'Backend';
   if (runtime.fallbackFrom === RECOGNITION_ENGINES.ON_DEVICE) {
     return `${engine} (fallback from on-device)`;
@@ -117,6 +123,24 @@ function buildRuntimeBadge(runtime, themeName = 'dark') {
       bg: isLight ? '#E2E8F0' : 'rgba(148, 163, 184, 0.16)',
       text: isLight ? '#334155' : '#E2E8F0',
       border: isLight ? '#CBD5E1' : 'rgba(148, 163, 184, 0.35)',
+    };
+  }
+
+  if (runtime.engine === 'manual-label') {
+    return {
+      label: 'Source: Manual label',
+      bg: isLight ? '#EDE9FE' : 'rgba(167, 139, 250, 0.18)',
+      text: isLight ? '#5B21B6' : '#DDD6FE',
+      border: isLight ? '#C4B5FD' : 'rgba(196, 181, 253, 0.36)',
+    };
+  }
+
+  if (runtime.engine === RECOGNITION_ENGINES.ON_DEVICE && runtime.degradedToOnDevice) {
+    return {
+      label: 'Source: On-device (degraded)',
+      bg: isLight ? '#FEF3C7' : 'rgba(245, 158, 11, 0.14)',
+      text: isLight ? '#92400E' : '#FCD34D',
+      border: isLight ? '#FCD34D' : 'rgba(251, 191, 36, 0.32)',
     };
   }
 
@@ -667,6 +691,34 @@ export default function CameraScreen({
     };
   };
 
+  const fetchWithTimeout = async (url, options = {}, timeoutMs = 30000) => {
+    const controller = new AbortController();
+    let timeoutId = null;
+    try {
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          controller.abort();
+          const timeoutError = new Error('Request timed out.');
+          timeoutError.code = 'REQUEST_TIMEOUT';
+          reject(timeoutError);
+        }, timeoutMs);
+      });
+      return await Promise.race([fetch(url, {
+        ...options,
+        signal: controller.signal,
+      }), timeoutPromise]);
+    } catch (error) {
+      if (error?.name === 'AbortError' || error?.code === 'REQUEST_TIMEOUT') {
+        const timeoutError = new Error('Request timed out.');
+        timeoutError.code = 'REQUEST_TIMEOUT';
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   const executeRecognition = async (payload, preferredEngine = inferenceEngine) => {
     return recognizeItem({
       payload,
@@ -677,6 +729,9 @@ export default function CameraScreen({
   };
 
   const handleAnalyze = async (manualOverrideLabel = null) => {
+    if (loading) {
+      return;
+    }
     setLoading(true);
     setResult(null);
     setLastRuntime(null);
@@ -704,7 +759,7 @@ export default function CameraScreen({
 
       if (manualOverrideLabel) {
         payload.detectedLabel = manualOverrideLabel;
-        payload.imageBase64 = lastCapturedImageRef.current || (await captureWithFallback());
+        payload.imageBase64 = '';
       } else if (selectedLabel === '__test_image__') {
         const imageBase64 = await loadDefaultImageBase64();
         payload.detectedLabel = '';
@@ -728,13 +783,57 @@ export default function CameraScreen({
         }
       } else {
         payload.detectedLabel = selectedLabel;
-        payload.imageBase64 = lastCapturedImageRef.current || (await captureWithFallback());
+        payload.imageBase64 = '';
       }
 
-      const { data, runtime } = await executeRecognition(payload, inferenceEngine);
-      const selectedManualLabel =
-        selectedLabel && selectedLabel !== '__test_image__' ? selectedLabel : '';
-      const manualConfirmedLabel = normalizeCandidateLabel(manualOverrideLabel || selectedManualLabel);
+      const immediateLabel = normalizeCandidateLabel(
+        manualOverrideLabel || (selectedLabel && selectedLabel !== '__test_image__' ? selectedLabel : '')
+      );
+      if (immediateLabel) {
+        const localResult = {
+          ...buildConfirmedProfile(immediateLabel, result),
+          confidence: 0.95,
+          explanation: manualOverrideLabel
+            ? `User confirmed label: ${immediateLabel}.`
+            : `Manual label selected: ${immediateLabel}.`,
+        };
+        const singleUse = isSingleUseResult(localResult);
+        setGoalState((prev) => {
+          const currentWeek = getWeekKey();
+          const base =
+            prev.weekKey === currentWeek
+              ? prev
+              : {
+                  weekKey: currentWeek,
+                  avoidedSingleUseCount: 0,
+                  currentStreak: prev.currentStreak,
+                  bestStreak: prev.bestStreak,
+                };
+          const nextStreak = singleUse ? 0 : base.currentStreak + 1;
+          const nextBest = Math.max(base.bestStreak, nextStreak);
+          return {
+            weekKey: currentWeek,
+            avoidedSingleUseCount: singleUse
+              ? base.avoidedSingleUseCount
+              : Math.min(base.avoidedSingleUseCount + 1, GOAL_TARGET),
+            currentStreak: nextStreak,
+            bestStreak: nextBest,
+          };
+        });
+        setResult(localResult);
+        setLastRuntime({
+          engine: 'manual-label',
+          source: 'local-profile',
+        });
+        return;
+      }
+
+      const isPresetLabelFlow = Boolean(selectedLabel && selectedLabel !== '__test_image__');
+      const preferredEngineForRun = (manualOverrideLabel || isPresetLabelFlow)
+        ? RECOGNITION_ENGINES.BACKEND
+        : inferenceEngine;
+      const { data, runtime } = await executeRecognition(payload, preferredEngineForRun);
+      const manualConfirmedLabel = normalizeCandidateLabel(manualOverrideLabel);
       const normalizedData =
         manualConfirmedLabel
           ? {
@@ -846,7 +945,6 @@ export default function CameraScreen({
 
     submitTrainingSample({
       apiBaseUrl,
-      userId,
       imageBase64: lastCapturedImageRef.current,
       predictedLabel,
       predictedConfidence,
@@ -902,6 +1000,10 @@ export default function CameraScreen({
     if (!result) {
       return;
     }
+    if (!String(authToken ?? '').trim()) {
+      showToast('Sign in with Google to save and load cloud history.', 'error');
+      return;
+    }
     const ecoScore =
       typeof result.ecoScore === 'number' && Number.isFinite(result.ecoScore)
         ? Math.round(result.ecoScore)
@@ -918,7 +1020,7 @@ export default function CameraScreen({
     };
 
     try {
-      const response = await fetch(buildApiUrl(apiBaseUrl, '/api/history'), {
+      const response = await fetchWithTimeout(buildApiUrl(apiBaseUrl, '/api/history'), {
         method: 'POST',
         headers: withAuthHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(requestBody),
@@ -951,7 +1053,7 @@ export default function CameraScreen({
       setScanHistory((prev) => [normalizedEntry, ...prev].slice(0, 40));
 
       try {
-        const statsResponse = await fetch(buildApiUrl(apiBaseUrl, '/api/history/stats'), {
+        const statsResponse = await fetchWithTimeout(buildApiUrl(apiBaseUrl, '/api/history/stats'), {
           headers: withAuthHeader({}),
         });
         if (statsResponse.ok) {
@@ -977,6 +1079,14 @@ export default function CameraScreen({
       showToast('Saved to backend history.', 'success');
       return;
     } catch (saveError) {
+      if (apiMode === 'production') {
+        const message = String(saveError?.message ?? '').trim();
+        showToast(
+          message ? `Cloud save failed: ${message}` : 'Cloud save failed. Please retry.',
+          'error'
+        );
+        return;
+      }
       const fallbackEntry = {
         id: `${Date.now()}`,
         item: requestBody.item,

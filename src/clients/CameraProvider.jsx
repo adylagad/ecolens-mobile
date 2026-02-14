@@ -7,6 +7,22 @@ const CameraProvider = forwardRef(function CameraProvider(_, ref) {
   const [permission, requestPermission] = useCameraPermissions();
   const [isCapturing, setIsCapturing] = useState(false);
 
+  const captureWithTimeout = async (capturePromise, timeoutMs = 8000) => {
+    let timeoutId = null;
+    try {
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Camera capture timed out. Try again.'));
+        }, timeoutMs);
+      });
+      return await Promise.race([capturePromise, timeoutPromise]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  };
+
   useEffect(() => {
     if (!permission) {
       requestPermission();
@@ -32,11 +48,11 @@ const CameraProvider = forwardRef(function CameraProvider(_, ref) {
 
       setIsCapturing(true);
       try {
-        const photo = await cameraRef.current.takePictureAsync({
+        const photo = await captureWithTimeout(cameraRef.current.takePictureAsync({
           quality: 0.8,
           base64: true,
           skipProcessing: true,
-        });
+        }));
 
         if (!photo?.base64) {
           throw new Error('Captured image did not include base64 data.');
