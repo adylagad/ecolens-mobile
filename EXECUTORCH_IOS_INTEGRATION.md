@@ -146,3 +146,27 @@ Example export call:
 ```bash
 curl "http://<backend-host>:8080/api/training/export?limit=2000&confirmedOnly=true&includeImages=true"
 ```
+
+End-to-end training scripts now live in backend repo:
+
+- `/Users/aditya/repos/hacks/ecolens-backend/ml/export_training_data.py`
+- `/Users/aditya/repos/hacks/ecolens-backend/ml/prepare_dataset.py`
+- `/Users/aditya/repos/hacks/ecolens-backend/ml/train_and_export.py`
+- `/Users/aditya/repos/hacks/ecolens-backend/ml/run_pipeline.py`
+
+Quick run:
+
+```bash
+cd /Users/aditya/repos/hacks/ecolens-backend
+python ml/run_pipeline.py \
+  --api-base-url "https://<backend-host>" \
+  --id-token "<GOOGLE_ID_TOKEN>" \
+  --limit 8000 \
+  --min-images-per-class 12 \
+  --epochs 12
+```
+
+Then copy generated artifacts:
+
+- `ml/artifacts/model/model.pte` -> `ios/ecolensmobile/model.pte`
+- `ml/artifacts/model/labels.json` -> `ios/ecolensmobile/labels.json`
