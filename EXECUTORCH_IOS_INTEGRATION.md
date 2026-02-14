@@ -53,6 +53,25 @@ warmup(config: {
 }) -> Promise<{ ok: boolean }>
 ```
 
+## Runtime adapter symbols required
+
+`ExecuTorchRecognizer.mm` now calls a C-ABI adapter via `dlsym`. Link a native library that exports:
+
+- `et_ecolens_create_model(const char* model_path, const char* tokenizer_path, const char* preset, const char** error_message)`
+- `et_ecolens_run_inference(void* handle, const float* input, int64_t input_size, int32_t width, int32_t height, const char* label_hint, const char** error_message)`
+- `et_ecolens_destroy_model(void* handle)`
+- `et_ecolens_free_cstring(const char* ptr)` (optional but recommended)
+
+The run function is expected to return a JSON string with fields such as:
+
+- `name` or `label`
+- `category`
+- `ecoScore` (or `eco_score`)
+- `co2Gram` (or `co2_gram`)
+- `confidence`
+- `summary` / `suggestion`
+- `explanation`
+
 3. The returned object should match current result usage in `CameraScreen`:
 
 - `name`
@@ -71,3 +90,9 @@ warmup(config: {
 - On-device mode currently throws a clear error until native module is linked.
 - Auto mode is safe for demos because it falls back to backend automatically.
 - This repo currently ignores `/ios` and `/android` in `.gitignore`; if you want native bridge code committed, remove those ignore entries.
+- JS runtime config is passed from env vars:
+  - `EXPO_PUBLIC_EXECUTORCH_MODEL_PATH`
+  - `EXPO_PUBLIC_EXECUTORCH_TOKENIZER_PATH`
+  - `EXPO_PUBLIC_EXECUTORCH_PRESET`
+  - `EXPO_PUBLIC_EXECUTORCH_INPUT_WIDTH`
+  - `EXPO_PUBLIC_EXECUTORCH_INPUT_HEIGHT`

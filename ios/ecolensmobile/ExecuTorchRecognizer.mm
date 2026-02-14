@@ -2,9 +2,31 @@
 #import <UIKit/UIKit.h>
 #import <React/RCTBridgeModule.h>
 
+#include <array>
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <cstdlib>
+#include <dlfcn.h>
+#include <memory>
+#include <vector>
+
 static NSString *const ETErrorBadPayload = @"E_BAD_PAYLOAD";
 static NSString *const ETErrorBadImage = @"E_BAD_IMAGE";
 static NSString *const ETErrorRuntime = @"E_RUNTIME";
+
+static NSString *const ETBridgeCreateSymbol = @"et_ecolens_create_model";
+static NSString *const ETBridgeRunSymbol = @"et_ecolens_run_inference";
+static NSString *const ETBridgeDestroySymbol = @"et_ecolens_destroy_model";
+static NSString *const ETBridgeFreeCStringSymbol = @"et_ecolens_free_cstring";
+
+static NSError *ETMakeError(NSInteger code, NSString *message)
+{
+  return [NSError errorWithDomain:@"ExecuTorchRecognizer"
+                             code:code
+                         userInfo:@{NSLocalizedDescriptionKey: message ?: @"Unknown error."}];
+}
 
 static NSString *ETStringOrEmpty(id value)
 {
@@ -21,6 +43,11 @@ static NSDictionary *ETDictionaryOrEmpty(id value)
   return [value isKindOfClass:[NSDictionary class]] ? (NSDictionary *)value : @{};
 }
 
+static NSArray *ETArrayOrEmpty(id value)
+{
+  return [value isKindOfClass:[NSArray class]] ? (NSArray *)value : @[];
+}
+
 static NSString *ETResolveExistingPath(NSString *candidate)
 {
   if (candidate.length == 0) {
@@ -29,12 +56,354 @@ static NSString *ETResolveExistingPath(NSString *candidate)
   return [[NSFileManager defaultManager] fileExistsAtPath:candidate] ? candidate : nil;
 }
 
-@interface ExecuTorchPipeline : NSObject
+static NSNumber *ETNumberFromUnknown(id value)
+{
+  if ([value isKindOfClass:[NSNumber class]]) {
+    return (NSNumber *)value;
+  }
+  if ([value isKindOfClass:[NSString class]]) {
+    NSString *stringValue = [(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (stringValue.length == 0) {
+      return nil;
+    }
+    NSNumberFormatter *formatter = [NSNumberFormatter new];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    return [formatter numberFromString:stringValue];
+  }
+  return nil;
+}
+
+static NSString *ETFirstString(NSDictionary *dict, NSArray<NSString *> *keys, NSString *fallback)
+{
+  for (NSString *key in keys) {
+    NSString *candidate = ETStringOrEmpty(dict[key]);
+    if (candidate.length > 0) {
+      return candidate;
+    }
+  }
+  return fallback;
+}
+
+static NSNumber *ETFirstNumber(NSDictionary *dict, NSArray<NSString *> *keys, NSNumber *fallback)
+{
+  for (NSString *key in keys) {
+    NSNumber *candidate = ETNumberFromUnknown(dict[key]);
+    if (candidate != nil) {
+      return candidate;
+    }
+  }
+  return fallback;
+}
+
+struct ETInputConfig {
+  int32_t width = 224;
+  int32_t height = 224;
+  bool normalize = true;
+  std::array<float, 3> mean = {0.485f, 0.456f, 0.406f};
+  std::array<float, 3> std = {0.229f, 0.224f, 0.225f};
+};
+
+struct ETPreprocessedTensor {
+  std::vector<float> chw;
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t channels = 3;
+  size_t sourceBytes = 0;
+};
+
+class ETImageTensorPreprocessor {
+public:
+  static bool preprocess(UIImage *image,
+                         const ETInputConfig &config,
+                         ETPreprocessedTensor &output,
+                         NSError **error)
+  {
+    if (!image || !image.CGImage) {
+      if (error != nullptr) {
+        *error = ETMakeError(2001, @"Input image is missing or invalid.");
+      }
+      return false;
+    }
+
+    const int32_t width = std::max(config.width, 1);
+    const int32_t height = std::max(config.height, 1);
+
+    std::vector<uint8_t> rgba(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    const CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Big | static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedLast);
+    CGContextRef context = CGBitmapContextCreate(
+      rgba.data(),
+      width,
+      height,
+      8,
+      width * 4,
+      colorSpace,
+      bitmapInfo);
+    CGColorSpaceRelease(colorSpace);
+
+    if (!context) {
+      if (error != nullptr) {
+        *error = ETMakeError(2002, @"Failed to create image preprocessing context.");
+      }
+      return false;
+    }
+
+    CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image.CGImage);
+    CGContextRelease(context);
+
+    ETPreprocessedTensor tensor;
+    tensor.width = width;
+    tensor.height = height;
+    tensor.channels = 3;
+    tensor.chw.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+
+    const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+    for (size_t i = 0; i < pixelCount; i++) {
+      const size_t rgbaBase = i * 4;
+      float r = static_cast<float>(rgba[rgbaBase]) / 255.0f;
+      float g = static_cast<float>(rgba[rgbaBase + 1]) / 255.0f;
+      float b = static_cast<float>(rgba[rgbaBase + 2]) / 255.0f;
+
+      if (config.normalize) {
+        r = (r - config.mean[0]) / config.std[0];
+        g = (g - config.mean[1]) / config.std[1];
+        b = (b - config.mean[2]) / config.std[2];
+      }
+
+      tensor.chw[i] = r;
+      tensor.chw[pixelCount + i] = g;
+      tensor.chw[(2 * pixelCount) + i] = b;
+    }
+
+    output = std::move(tensor);
+    return true;
+  }
+};
+
+typedef void *(*ETCreateModelFn)(const char *model_path,
+                                 const char *tokenizer_path,
+                                 const char *preset,
+                                 const char **error_message);
+typedef const char *(*ETRunInferenceFn)(void *handle,
+                                        const float *input,
+                                        int64_t input_size,
+                                        int32_t width,
+                                        int32_t height,
+                                        const char *label_hint,
+                                        const char **error_message);
+typedef void (*ETDestroyModelFn)(void *handle);
+typedef void (*ETFreeCStringFn)(const char *ptr);
+
+class ETExecuTorchRuntimeBridge {
+public:
+  ETExecuTorchRuntimeBridge()
+  {
+    createFn_ = reinterpret_cast<ETCreateModelFn>(dlsym(RTLD_DEFAULT, ETBridgeCreateSymbol.UTF8String));
+    runFn_ = reinterpret_cast<ETRunInferenceFn>(dlsym(RTLD_DEFAULT, ETBridgeRunSymbol.UTF8String));
+    destroyFn_ = reinterpret_cast<ETDestroyModelFn>(dlsym(RTLD_DEFAULT, ETBridgeDestroySymbol.UTF8String));
+    freeCStringFn_ = reinterpret_cast<ETFreeCStringFn>(dlsym(RTLD_DEFAULT, ETBridgeFreeCStringSymbol.UTF8String));
+  }
+
+  ~ETExecuTorchRuntimeBridge()
+  {
+    unload();
+  }
+
+  bool isLinked() const
+  {
+    return createFn_ != nullptr && runFn_ != nullptr && destroyFn_ != nullptr;
+  }
+
+  bool loadModel(NSString *modelPath,
+                 NSString *tokenizerPath,
+                 NSString *preset,
+                 NSString **errorMessage)
+  {
+    if (!isLinked()) {
+      if (errorMessage != nullptr) {
+        *errorMessage = @"ExecuTorch adapter symbols are not linked. Export C symbols et_ecolens_create_model, et_ecolens_run_inference, and et_ecolens_destroy_model.";
+      }
+      return false;
+    }
+
+    if (modelPath.length == 0) {
+      if (errorMessage != nullptr) {
+        *errorMessage = @"No model path provided. Supply runtimeConfig.modelPath or bundle a .pte model file.";
+      }
+      return false;
+    }
+
+    if (handle_ != nullptr &&
+        [loadedModelPath_ isEqualToString:modelPath] &&
+        [loadedTokenizerPath_ isEqualToString:(tokenizerPath ?: @"")] &&
+        [loadedPreset_ isEqualToString:(preset ?: @"")]) {
+      return true;
+    }
+
+    unload();
+
+    const char *errorOut = nullptr;
+    handle_ = createFn_(modelPath.UTF8String,
+                        tokenizerPath.length > 0 ? tokenizerPath.UTF8String : nullptr,
+                        preset.length > 0 ? preset.UTF8String : nullptr,
+                        &errorOut);
+    if (handle_ == nullptr) {
+      if (errorMessage != nullptr) {
+        if (errorOut != nullptr) {
+          *errorMessage = [NSString stringWithUTF8String:errorOut];
+        } else {
+          *errorMessage = @"ExecuTorch model initialization failed.";
+        }
+      }
+      if (errorOut != nullptr && freeCStringFn_ != nullptr) {
+        freeCStringFn_(errorOut);
+      }
+      return false;
+    }
+
+    loadedModelPath_ = [modelPath copy];
+    loadedTokenizerPath_ = [tokenizerPath copy] ?: @"";
+    loadedPreset_ = [preset copy] ?: @"";
+    return true;
+  }
+
+  NSDictionary *runInference(const ETPreprocessedTensor &tensor,
+                             NSString *labelHint,
+                             NSString **errorMessage)
+  {
+    if (!isLinked() || handle_ == nullptr) {
+      if (errorMessage != nullptr) {
+        *errorMessage = @"ExecuTorch runtime is not initialized.";
+      }
+      return nil;
+    }
+
+    const char *errorOut = nullptr;
+    const char *json = runFn_(
+      handle_,
+      tensor.chw.data(),
+      static_cast<int64_t>(tensor.chw.size()),
+      tensor.width,
+      tensor.height,
+      labelHint.length > 0 ? labelHint.UTF8String : nullptr,
+      &errorOut);
+
+    if (json == nullptr) {
+      if (errorMessage != nullptr) {
+        if (errorOut != nullptr) {
+          *errorMessage = [NSString stringWithUTF8String:errorOut];
+        } else {
+          *errorMessage = @"ExecuTorch inference returned empty output.";
+        }
+      }
+      if (errorOut != nullptr && freeCStringFn_ != nullptr) {
+        freeCStringFn_(errorOut);
+      }
+      return nil;
+    }
+
+    NSData *jsonData = [NSData dataWithBytes:json length:strlen(json)];
+    NSError *jsonError = nil;
+    id parsed = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&jsonError];
+
+    if (freeCStringFn_ != nullptr) {
+      freeCStringFn_(json);
+    }
+    if (errorOut != nullptr && freeCStringFn_ != nullptr) {
+      freeCStringFn_(errorOut);
+    }
+
+    if (jsonError != nil || ![parsed isKindOfClass:[NSDictionary class]]) {
+      if (errorMessage != nullptr) {
+        *errorMessage = jsonError.localizedDescription ?: @"ExecuTorch output JSON parsing failed.";
+      }
+      return nil;
+    }
+
+    return (NSDictionary *)parsed;
+  }
+
+  NSString *loadedModelPath() const { return loadedModelPath_; }
+  NSString *loadedTokenizerPath() const { return loadedTokenizerPath_; }
+  NSString *loadedPreset() const { return loadedPreset_; }
+
+private:
+  void unload()
+  {
+    if (handle_ != nullptr && destroyFn_ != nullptr) {
+      destroyFn_(handle_);
+      handle_ = nullptr;
+    }
+  }
+
+  ETCreateModelFn createFn_ = nullptr;
+  ETRunInferenceFn runFn_ = nullptr;
+  ETDestroyModelFn destroyFn_ = nullptr;
+  ETFreeCStringFn freeCStringFn_ = nullptr;
+  void *handle_ = nullptr;
+  NSString *loadedModelPath_ = @"";
+  NSString *loadedTokenizerPath_ = @"";
+  NSString *loadedPreset_ = @"";
+};
+
+class ETOutputParser {
+public:
+  static NSDictionary *normalize(NSDictionary *raw,
+                                 NSString *labelHint,
+                                 NSNumber *confidenceHint,
+                                 NSDictionary *runtime,
+                                 NSDictionary *imageMetadata)
+  {
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+
+    NSString *name = ETFirstString(raw, @[ @"name", @"label", @"detected_label", @"item" ], labelHint.length > 0 ? labelHint : @"Detected Item");
+    NSString *category = ETFirstString(raw, @[ @"category", @"class", @"item_type" ], @"unknown");
+    NSNumber *ecoScore = ETFirstNumber(raw, @[ @"ecoScore", @"eco_score", @"score" ], @55);
+    NSNumber *co2 = ETFirstNumber(raw, @[ @"co2Gram", @"co2_gram", @"co2" ], @95);
+    NSNumber *confidence = ETFirstNumber(raw, @[ @"confidence", @"score_confidence" ], confidenceHint ?: @0.62);
+
+    NSString *summary = ETFirstString(raw, @[ @"summary", @"suggestion", @"altRecommendation" ], @"Prefer reusable alternatives where possible.");
+    NSString *explanation = ETFirstString(raw, @[ @"explanation", @"reasoning", @"analysis" ], @"Result generated by ExecuTorch runtime path.");
+    NSString *title = ETFirstString(raw, @[ @"title" ], @"On-device inference");
+
+    NSArray *rawFactors = ETArrayOrEmpty(raw[@"scoreFactors"]);
+    NSArray *scoreFactors = rawFactors.count > 0
+      ? rawFactors
+      : @[
+          @{ @"code": @"model_output", @"label": @"Model output", @"detail": @"Derived from ExecuTorch inference response.", @"delta": @0 }
+        ];
+
+    result[@"title"] = title;
+    result[@"name"] = name;
+    result[@"category"] = category;
+    result[@"ecoScore"] = ecoScore;
+    result[@"co2Gram"] = co2;
+    result[@"confidence"] = confidence;
+    result[@"suggestion"] = summary;
+    result[@"altRecommendation"] = summary;
+    result[@"explanation"] = explanation;
+    result[@"scoreFactors"] = scoreFactors;
+
+    NSMutableDictionary *runtimeOut = [runtime mutableCopy] ?: [NSMutableDictionary dictionary];
+    if (imageMetadata.count > 0) {
+      runtimeOut[@"image"] = imageMetadata;
+    }
+    result[@"runtime"] = runtimeOut;
+    return result;
+  }
+};
+
+@interface ExecuTorchPipeline : NSObject {
+@private
+  std::unique_ptr<ETExecuTorchRuntimeBridge> _runtimeBridge;
+}
 @property (nonatomic, strong) NSDate *lastWarmupAt;
 @property (nonatomic, copy) NSString *activeModelPath;
 @property (nonatomic, copy) NSString *activeTokenizerPath;
 @property (nonatomic, copy) NSString *activePreset;
 @property (nonatomic, assign) BOOL initialized;
+@property (nonatomic, assign) ETInputConfig inputConfig;
 - (BOOL)warmupWithConfig:(NSDictionary *)config error:(NSError **)error;
 - (NSDictionary *)runWithPayload:(NSDictionary *)payload error:(NSError **)error;
 @end
@@ -45,8 +414,10 @@ static NSString *ETResolveExistingPath(NSString *candidate)
 {
   self = [super init];
   if (self) {
+    _runtimeBridge = std::make_unique<ETExecuTorchRuntimeBridge>();
     _initialized = NO;
     _activePreset = @"balanced";
+    _inputConfig = ETInputConfig();
   }
   return self;
 }
@@ -82,149 +453,182 @@ static NSString *ETResolveExistingPath(NSString *candidate)
   return nil;
 }
 
+- (void)updateInputConfigFromRuntime:(NSDictionary *)runtimeConfig
+{
+  NSNumber *requestedWidth = ETNumberFromUnknown(runtimeConfig[@"inputWidth"]);
+  NSNumber *requestedHeight = ETNumberFromUnknown(runtimeConfig[@"inputHeight"]);
+  NSNumber *requestedNormalize = ETNumberFromUnknown(runtimeConfig[@"normalize"]);
+
+  ETInputConfig next = self.inputConfig;
+  if (requestedWidth != nil) {
+    next.width = std::max(1, requestedWidth.intValue);
+  }
+  if (requestedHeight != nil) {
+    next.height = std::max(1, requestedHeight.intValue);
+  }
+  if (requestedNormalize != nil) {
+    next.normalize = requestedNormalize.boolValue;
+  }
+
+  NSArray *meanValues = ETArrayOrEmpty(runtimeConfig[@"mean"]);
+  NSArray *stdValues = ETArrayOrEmpty(runtimeConfig[@"std"]);
+  if (meanValues.count == 3) {
+    for (NSUInteger i = 0; i < 3; i++) {
+      NSNumber *value = ETNumberFromUnknown(meanValues[i]);
+      if (value != nil) {
+        next.mean[i] = value.floatValue;
+      }
+    }
+  }
+  if (stdValues.count == 3) {
+    for (NSUInteger i = 0; i < 3; i++) {
+      NSNumber *value = ETNumberFromUnknown(stdValues[i]);
+      if (value != nil && std::fabs(value.floatValue) > 1e-8f) {
+        next.std[i] = value.floatValue;
+      }
+    }
+  }
+
+  self.inputConfig = next;
+}
+
 - (BOOL)warmupWithConfig:(NSDictionary *)config error:(NSError **)error
 {
   NSDictionary *runtimeConfig = ETDictionaryOrEmpty(config);
+  [self updateInputConfigFromRuntime:runtimeConfig];
+
   NSString *requestedModelPath = ETStringOrEmpty(runtimeConfig[@"modelPath"]);
   NSString *requestedTokenizerPath = ETStringOrEmpty(runtimeConfig[@"tokenizerPath"]);
   NSString *requestedPreset = ETStringOrEmpty(runtimeConfig[@"preset"]);
 
   NSString *resolvedModelPath = ETResolveExistingPath(requestedModelPath) ?: [self resolveBundleModelPath];
   NSString *resolvedTokenizerPath = ETResolveExistingPath(requestedTokenizerPath) ?: [self resolveBundleTokenizerPath];
+  NSString *resolvedPreset = requestedPreset.length > 0 ? requestedPreset : @"balanced";
 
-  /*
-   TODO(ExecuTorch Integration):
-   - Load and cache ExecuTorch module from resolvedModelPath.
-   - Load tokenizer artifacts from resolvedTokenizerPath.
-   - Initialize backend/delegate selection (CPU / MPS / CoreML delegates when available).
-  */
+  if (resolvedModelPath.length == 0) {
+    if (error != nullptr) {
+      *error = ETMakeError(3001, @"No .pte model found. Provide runtimeConfig.modelPath or bundle a model file.");
+    }
+    return false;
+  }
+
+  NSString *bridgeError = nil;
+  if (!_runtimeBridge->loadModel(resolvedModelPath, resolvedTokenizerPath ?: @"", resolvedPreset, &bridgeError)) {
+    if (error != nullptr) {
+      *error = ETMakeError(3002, bridgeError ?: @"Failed to load ExecuTorch model.");
+    }
+    return false;
+  }
+
   self.activeModelPath = resolvedModelPath ?: @"";
   self.activeTokenizerPath = resolvedTokenizerPath ?: @"";
-  self.activePreset = requestedPreset.length > 0 ? requestedPreset : @"balanced";
+  self.activePreset = resolvedPreset;
   self.lastWarmupAt = [NSDate date];
   self.initialized = YES;
 
-  if (self.activeModelPath.length == 0) {
-    NSLog(@"[ExecuTorchRecognizer] No model path found yet. Running in scaffold mode.");
-  }
-  if (error != NULL) {
+  if (error != nullptr) {
     *error = nil;
   }
-  return YES;
+  return true;
 }
 
-- (NSDictionary *)decodeImageMetadataFromBase64:(NSString *)imageBase64 error:(NSError **)error
+- (UIImage *)decodeImageFromBase64:(NSString *)imageBase64 byteCount:(size_t *)byteCount error:(NSError **)error
 {
   if (imageBase64.length == 0) {
-    if (error != NULL) {
-      *error = nil;
+    if (error != nullptr) {
+      *error = ETMakeError(4001, @"imageBase64 is required for on-device inference.");
     }
-    return @{};
+    return nil;
   }
 
   NSData *imageData = [[NSData alloc] initWithBase64EncodedString:imageBase64
                                                            options:NSDataBase64DecodingIgnoreUnknownCharacters];
   if (imageData.length == 0) {
-    if (error != NULL) {
-      *error = [NSError errorWithDomain:@"ExecuTorchRecognizer"
-                                   code:1001
-                               userInfo:@{NSLocalizedDescriptionKey: @"imageBase64 could not be decoded."}];
+    if (error != nullptr) {
+      *error = ETMakeError(4002, @"imageBase64 could not be decoded.");
     }
     return nil;
   }
 
   UIImage *image = [UIImage imageWithData:imageData];
-  if (!image) {
-    if (error != NULL) {
-      *error = [NSError errorWithDomain:@"ExecuTorchRecognizer"
-                                   code:1002
-                               userInfo:@{NSLocalizedDescriptionKey: @"Decoded image bytes are not a valid image."}];
+  if (!image || !image.CGImage) {
+    if (error != nullptr) {
+      *error = ETMakeError(4003, @"Decoded bytes are not a valid image.");
     }
     return nil;
   }
 
-  NSDictionary *metadata = @{
-    @"width": @(image.size.width),
-    @"height": @(image.size.height),
-    @"bytes": @(imageData.length)
-  };
-  if (error != NULL) {
-    *error = nil;
+  if (byteCount != nullptr) {
+    *byteCount = imageData.length;
   }
-  return metadata;
+  return image;
 }
 
 - (NSDictionary *)runWithPayload:(NSDictionary *)payload error:(NSError **)error
 {
   if (!self.initialized) {
-    [self warmupWithConfig:@{} error:nil];
+    if (![self warmupWithConfig:@{} error:error]) {
+      return nil;
+    }
   }
 
   NSString *labelHint = ETStringOrEmpty(payload[@"detectedLabel"]);
-  NSString *imageBase64 = ETStringOrEmpty(payload[@"imageBase64"]);
   NSNumber *confidenceHint = ETNumberOrNil(payload[@"confidence"]) ?: @0.62;
+  NSString *imageBase64 = ETStringOrEmpty(payload[@"imageBase64"]);
 
-  NSError *imageError = nil;
-  NSDictionary *imageMetadata = [self decodeImageMetadataFromBase64:imageBase64 error:&imageError];
-  if (imageError != nil) {
-    if (error != NULL) {
-      *error = imageError;
+  size_t sourceBytes = 0;
+  NSError *decodeError = nil;
+  UIImage *image = [self decodeImageFromBase64:imageBase64 byteCount:&sourceBytes error:&decodeError];
+  if (!image) {
+    if (error != nullptr) {
+      *error = decodeError;
     }
     return nil;
   }
 
-  NSString *name = labelHint.length > 0 ? labelHint : @"Detected Item";
-  NSString *normalized = [name lowercaseString];
-  BOOL likelyReusable = [normalized containsString:@"reusable"] || [normalized containsString:@"steel"];
+  ETPreprocessedTensor inputTensor;
+  NSError *preprocessError = nil;
+  if (!ETImageTensorPreprocessor::preprocess(image, self.inputConfig, inputTensor, &preprocessError)) {
+    if (error != nullptr) {
+      *error = preprocessError ?: ETMakeError(5001, @"Image preprocessing failed.");
+    }
+    return nil;
+  }
+  inputTensor.sourceBytes = sourceBytes;
 
-  NSInteger ecoScore = likelyReusable ? 84 : 58;
-  NSInteger co2Gram = likelyReusable ? 33 : 104;
-  NSString *suggestion = likelyReusable ? @"Keep reusing this item to maximize impact."
-                                        : @"Prefer reusable variants when possible.";
+  NSString *runErrorText = nil;
+  NSDictionary *rawOutput = _runtimeBridge->runInference(inputTensor, labelHint, &runErrorText);
+  if (rawOutput == nil) {
+    if (error != nullptr) {
+      *error = ETMakeError(5002, runErrorText ?: @"ExecuTorch inference failed.");
+    }
+    return nil;
+  }
 
-  /*
-   TODO(ExecuTorch Inference):
-   1) Preprocess image into model input tensor.
-   2) Run vision model forward pass with ExecuTorch runtime.
-   3) Feed extracted semantics into LLM summarizer or VLM decoder.
-   4) Map model output to this structured schema.
-  */
+  NSDictionary *imageMetadata = @{
+    @"sourceWidth": @(image.size.width),
+    @"sourceHeight": @(image.size.height),
+    @"sourceBytes": @(inputTensor.sourceBytes),
+    @"tensorWidth": @(inputTensor.width),
+    @"tensorHeight": @(inputTensor.height),
+    @"tensorChannels": @(inputTensor.channels),
+    @"tensorElementCount": @(inputTensor.chw.size())
+  };
 
-  NSMutableDictionary *runtime = [@{
+  NSDictionary *runtime = @{
     @"engine": @"on-device",
-    @"source": @"ios-native-scaffold",
-    @"preset": self.activePreset ?: @"balanced",
+    @"source": @"executorch-c-abi",
     @"modelPath": self.activeModelPath ?: @"",
     @"tokenizerPath": self.activeTokenizerPath ?: @"",
+    @"preset": self.activePreset ?: @"balanced",
     @"warmupAt": self.lastWarmupAt ? @([self.lastWarmupAt timeIntervalSince1970] * 1000.0) : @0
-  } mutableCopy];
-  if (imageMetadata.count > 0) {
-    runtime[@"image"] = imageMetadata;
-  }
+  };
 
-  if (error != NULL) {
+  NSDictionary *normalized = ETOutputParser::normalize(rawOutput, labelHint, confidenceHint, runtime, imageMetadata);
+  if (error != nullptr) {
     *error = nil;
   }
-  return @{
-    @"title": @"On-device (pipeline scaffold)",
-    @"name": name,
-    @"category": likelyReusable ? @"reusable-item" : @"single-use-or-unknown",
-    @"ecoScore": @(ecoScore),
-    @"co2Gram": @(co2Gram),
-    @"confidence": confidenceHint,
-    @"suggestion": suggestion,
-    @"altRecommendation": @"Choose reusable alternatives to reduce lifecycle impact.",
-    @"explanation": @"iOS native pipeline scaffold is active. Replace placeholder scoring with ExecuTorch inference outputs.",
-    @"scoreFactors": @[
-      @{
-        @"code": @"pipeline_scaffold",
-        @"label": @"Scaffold inference path",
-        @"detail": @"Result came from native Objective-C++ scaffold pending ExecuTorch model execution.",
-        @"delta": @0
-      }
-    ],
-    @"runtime": runtime
-  };
+  return normalized;
 }
 
 @end
@@ -301,7 +705,7 @@ RCT_REMAP_METHOD(
   NSError *runError = nil;
   NSDictionary *result = [self.pipeline runWithPayload:payload error:&runError];
   if (runError != nil || result == nil) {
-    NSString *errorCode = (runError.code == 1001 || runError.code == 1002) ? ETErrorBadImage : ETErrorRuntime;
+    NSString *errorCode = (runError.code >= 4000 && runError.code < 5000) ? ETErrorBadImage : ETErrorRuntime;
     reject(errorCode, runError.localizedDescription ?: @"Inference failed.", runError);
     return;
   }
