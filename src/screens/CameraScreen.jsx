@@ -656,6 +656,17 @@ export default function CameraScreen({
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
+  const withAuthHeader = (headers = {}) => {
+    const token = String(authToken ?? '').trim();
+    if (!token) {
+      return headers;
+    }
+    return {
+      ...headers,
+      Authorization: `Bearer ${token}`,
+    };
+  };
+
   const executeRecognition = async (payload, preferredEngine = inferenceEngine) => {
     return recognizeItem({
       payload,
