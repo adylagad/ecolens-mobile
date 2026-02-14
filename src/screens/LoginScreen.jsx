@@ -50,8 +50,13 @@ function GoogleSignInButton({ styles, palette, onLogin, showToast }) {
       }
 
       const accessToken = response.authentication?.accessToken;
+      const idToken = response.authentication?.idToken;
       if (!accessToken) {
         showToast('Google sign-in did not return an access token.', 'error');
+        return;
+      }
+      if (!idToken) {
+        showToast('Google sign-in did not return an ID token.', 'error');
         return;
       }
 
@@ -72,6 +77,8 @@ function GoogleSignInButton({ styles, palette, onLogin, showToast }) {
           name: profile?.name ?? 'EcoLens User',
           email: profile?.email ?? '',
           picture: profile?.picture ?? '',
+          idToken,
+          accessToken,
           provider: 'google',
         });
       } catch (error) {
@@ -159,7 +166,7 @@ export default function LoginScreen({ themeName = 'dark', onLogin = () => {}, sh
           )}
           <Pressable
             style={styles.secondaryButton}
-            onPress={() => onLogin({ name: 'Guest User', provider: 'guest' })}
+            onPress={() => onLogin({ name: 'Guest User', provider: 'guest', idToken: '' })}
           >
             <Text style={styles.secondaryButtonText}>Continue as Guest</Text>
           </Pressable>

@@ -56,6 +56,25 @@ function resolveUserId(authUser) {
   return 'anonymous';
 }
 
+function resolveAuthToken(authUser) {
+  if (!authUser) {
+    return '';
+  }
+  const token = String(authUser.idToken ?? '').trim();
+  return token;
+}
+
+function withAuthHeader(headers = {}, authToken = '') {
+  const token = String(authToken ?? '').trim();
+  if (!token) {
+    return headers;
+  }
+  return {
+    ...headers,
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 function resolveHistoryErrorMessage(error, statusCode, apiMode, apiBaseUrl) {
   const raw = String(error?.message ?? '').trim();
   if (
@@ -101,6 +120,7 @@ export default function App() {
   const themeName = colorScheme === 'light' ? 'light' : 'dark';
   const apiBaseUrl = apiMode === 'development' ? devBaseUrl : PROD_API_BASE_URL;
   const userId = resolveUserId(authUser);
+  const authToken = resolveAuthToken(authUser);
   const palette = THEMES[themeName] ?? THEMES.dark;
   const styles = createStyles(palette, themeName);
   const toastTimerRef = useRef(null);
@@ -166,7 +186,7 @@ export default function App() {
   }, []);
 
   const loadHistory = async () => {
-    if (!userId) {
+    if (!userId || !authToken) {
       setHistoryLoading(false);
       return;
     }
@@ -176,7 +196,9 @@ export default function App() {
       const userQuery = `userId=${encodeURIComponent(userId)}`;
       const historyUrl = `${buildApiUrl(apiBaseUrl, '/api/history')}?${userQuery}`;
       const statsUrl = `${buildApiUrl(apiBaseUrl, '/api/history/stats')}?${userQuery}`;
-      const historyResponse = await fetch(historyUrl);
+      const historyResponse = await fetch(historyUrl, {
+        headers: withAuthHeader({}, authToken),
+      });
 
       if (historyResponse.ok) {
         const historyData = await historyResponse.json();
@@ -196,7 +218,9 @@ export default function App() {
       }
 
       try {
-        const statsResponse = await fetch(statsUrl);
+        const statsResponse = await fetch(statsUrl, {
+          headers: withAuthHeader({}, authToken),
+        });
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           setHistoryStats({
@@ -224,7 +248,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !authToken) {
       setScanHistory([]);
       setHistoryStats(EMPTY_HISTORY_STATS);
       return;
@@ -232,14 +256,14 @@ export default function App() {
     // Keep history scoped to the selected backend mode (prod/dev) and user.
     setScanHistory([]);
     setHistoryStats(EMPTY_HISTORY_STATS);
-  }, [apiBaseUrl, userId]);
+  }, [apiBaseUrl, authToken, userId]);
 
   useEffect(() => {
-    if (activeTab !== 'history' || !userId) {
+    if (activeTab !== 'history' || !userId || !authToken) {
       return;
     }
     loadHistory();
-  }, [activeTab, apiBaseUrl, userId]);
+  }, [activeTab, apiBaseUrl, authToken, userId]);
 
   return (
     <SafeAreaView style={styles.appRoot}>
@@ -301,6 +325,7 @@ export default function App() {
             setDevBaseUrl={setDevBaseUrl}
             apiBaseUrl={apiBaseUrl}
             userId={userId}
+            authToken={authToken}
             themeName={themeName}
             historyThresholds={historyStats}
             showToast={showToast}
