@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import CameraProvider from '../clients/CameraProvider';
 import { TEST_IMAGE_BASE64 } from '../config/testImageBase64';
+import { RECOGNITION_ENGINES, recognizeItem } from '../services/recognition/recognitionService';
 import { THEMES } from '../theme';
 import { buildApiUrl } from '../utils/apiUrl';
 
@@ -75,7 +76,37 @@ function getConfidenceTone(confidence, themeName = 'dark') {
 }
 
 const GOAL_TARGET = 5;
-const LOADING_STAGES = ['Uploading', 'Detecting', 'Scoring'];
+const INFERENCE_OPTIONS = [
+  { label: 'Auto', value: RECOGNITION_ENGINES.AUTO },
+  { label: 'On-device', value: RECOGNITION_ENGINES.ON_DEVICE },
+  { label: 'Backend', value: RECOGNITION_ENGINES.BACKEND },
+];
+const LOADING_STAGES_BY_ENGINE = {
+  [RECOGNITION_ENGINES.AUTO]: ['Preparing', 'Detecting', 'Summarizing'],
+  [RECOGNITION_ENGINES.ON_DEVICE]: ['Preparing', 'Running on-device', 'Summarizing'],
+  [RECOGNITION_ENGINES.BACKEND]: ['Uploading', 'Detecting', 'Scoring'],
+};
+
+function getInferenceLabel(engine) {
+  if (engine === RECOGNITION_ENGINES.ON_DEVICE) {
+    return 'On-device';
+  }
+  if (engine === RECOGNITION_ENGINES.BACKEND) {
+    return 'Backend';
+  }
+  return 'Auto';
+}
+
+function buildRuntimeLabel(runtime) {
+  if (!runtime || typeof runtime !== 'object') {
+    return 'No inference yet';
+  }
+  const engine = runtime.engine === RECOGNITION_ENGINES.ON_DEVICE ? 'On-device' : 'Backend';
+  if (runtime.fallbackFrom === RECOGNITION_ENGINES.ON_DEVICE) {
+    return `${engine} (fallback from on-device)`;
+  }
+  return engine;
+}
 
 function getWeekKey(date = new Date()) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -271,9 +302,11 @@ export default function CameraScreen({
 
   const [selectedLabel, setSelectedLabel] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [inferenceEngine, setInferenceEngine] = useState(RECOGNITION_ENGINES.AUTO);
   const [loading, setLoading] = useState(false);
   const [loadingStageIndex, setLoadingStageIndex] = useState(0);
   const [result, setResult] = useState(null);
+  const [lastRuntime, setLastRuntime] = useState(null);
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [queuedRequests, setQueuedRequests] = useState([]);
 
@@ -284,6 +317,9 @@ export default function CameraScreen({
   const manualLabelOptions = LABEL_OPTIONS.filter(
     (option) => option.value && option.value !== '__test_image__'
   );
+  const loadingStages = useMemo(() => {
+    return LOADING_STAGES_BY_ENGINE[inferenceEngine] || LOADING_STAGES_BY_ENGINE[RECOGNITION_ENGINES.AUTO];
+  }, [inferenceEngine]);
   const highImpactThreshold =
     typeof historyThresholds?.highImpactThreshold === 'number' &&
     Number.isFinite(historyThresholds.highImpactThreshold)
@@ -322,42 +358,27 @@ export default function CameraScreen({
       return undefined;
     }
     const interval = setInterval(() => {
-      setLoadingStageIndex((prev) => (prev + 1) % LOADING_STAGES.length);
+      setLoadingStageIndex((prev) => (prev + 1) % loadingStages.length);
     }, 900);
     return () => clearInterval(interval);
-  }, [loading]);
+  }, [loading, loadingStages]);
 
-  const loadingStage = LOADING_STAGES[loadingStageIndex];
+  const loadingStage = loadingStages[loadingStageIndex];
 
   const loadDefaultImageBase64 = async () => TEST_IMAGE_BASE64;
 
-  const executeRecognition = async (payload) => {
-    const response = await fetch(buildApiUrl(apiBaseUrl, '/api/recognize'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+  const executeRecognition = async (payload, preferredEngine = inferenceEngine) => {
+    return recognizeItem({
+      payload,
+      apiBaseUrl,
+      preferredEngine,
     });
-
-    let data = null;
-    try {
-      data = await response.json();
-    } catch (parseError) {
-      data = null;
-    }
-
-    if (!response.ok) {
-      const error = new Error(data?.message || `Request failed (${response.status})`);
-      error.code = response.status;
-      throw error;
-    }
-    return data;
   };
 
   const handleAnalyze = async (manualOverrideLabel = null) => {
     setLoading(true);
     setResult(null);
+    setLastRuntime(null);
 
     let payload = {
       detectedLabel: '',
@@ -390,7 +411,7 @@ export default function CameraScreen({
         payload.detectedLabel = selectedLabel;
       }
 
-      const data = await executeRecognition(payload);
+      const { data, runtime } = await executeRecognition(payload, inferenceEngine);
       const singleUse = isSingleUseResult(data);
       setGoalState((prev) => {
         const currentWeek = getWeekKey();
@@ -410,6 +431,7 @@ export default function CameraScreen({
         };
       });
       setResult(data);
+      setLastRuntime(runtime ?? null);
     } catch (fetchError) {
       const maybeOffline =
         !fetchError.code &&
@@ -419,6 +441,7 @@ export default function CameraScreen({
         const queued = {
           id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
           payload,
+          preferredEngine: inferenceEngine,
           createdAt: new Date().toISOString(),
         };
         setQueuedRequests((prev) => [queued, ...prev].slice(0, 20));
@@ -441,10 +464,15 @@ export default function CameraScreen({
       return;
     }
     setLoading(true);
+    setLastRuntime(null);
     const [next, ...rest] = queuedRequests;
     try {
-      const data = await executeRecognition(next.payload);
+      const { data, runtime } = await executeRecognition(
+        next.payload,
+        next.preferredEngine || RECOGNITION_ENGINES.AUTO
+      );
       setResult(data);
+      setLastRuntime(runtime ?? null);
       setQueuedRequests(rest);
       showToast('Queued scan processed successfully.', 'success');
     } catch (retryError) {
@@ -688,6 +716,33 @@ export default function CameraScreen({
           ) : null}
 
           <Text style={styles.endpointText}>Active endpoint: {apiBaseUrl}</Text>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Inference Engine</Text>
+          <Text style={styles.sectionHint}>Choose where detection + summary runs.</Text>
+
+          <View style={styles.modeRow}>
+            {INFERENCE_OPTIONS.map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => setInferenceEngine(option.value)}
+                style={[styles.modeButton, inferenceEngine === option.value ? styles.modeButtonActive : null]}
+              >
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    inferenceEngine === option.value ? styles.modeButtonTextActive : null,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.endpointText}>Preferred engine: {getInferenceLabel(inferenceEngine)}</Text>
+          <Text style={styles.endpointText}>Last run: {buildRuntimeLabel(lastRuntime)}</Text>
         </View>
 
         <View style={styles.sectionCard}>
