@@ -10,6 +10,7 @@ export const RECOGNITION_ENGINES = {
 
 const DEFAULT_ON_DEVICE_FALLBACK_CONFIDENCE = 0.45;
 const HARD_REJECT_ONDEVICE_CONFIDENCE = 0.3;
+const DEFAULT_DISABLE_BACKEND_FALLBACK = true;
 
 function normalizeEngine(engine) {
   const value = String(engine ?? '').trim().toLowerCase();
@@ -32,6 +33,27 @@ function parseFallbackThreshold() {
     return DEFAULT_ON_DEVICE_FALLBACK_CONFIDENCE;
   }
   return Math.max(0, Math.min(1, parsed));
+}
+
+function parseBooleanEnv(value, defaultValue) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return defaultValue;
+  }
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') {
+    return true;
+  }
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') {
+    return false;
+  }
+  return defaultValue;
+}
+
+function shouldDisableBackendFallback() {
+  return parseBooleanEnv(
+    process.env?.EXPO_PUBLIC_DISABLE_BACKEND_FALLBACK,
+    DEFAULT_DISABLE_BACKEND_FALLBACK
+  );
 }
 
 function parseConfidenceValue(result) {
@@ -155,6 +177,7 @@ export async function recognizeItem({
   authToken = '',
 }) {
   const engine = normalizeEngine(preferredEngine);
+  const disableBackendFallback = shouldDisableBackendFallback();
 
   if (engine === RECOGNITION_ENGINES.BACKEND) {
     return recognizeWithBackend({ payload, apiBaseUrl, authToken });
@@ -166,6 +189,19 @@ export async function recognizeItem({
     const fallbackThreshold = parseFallbackThreshold();
     if (onDeviceConfidence === null || onDeviceConfidence >= fallbackThreshold) {
       return onDeviceResult;
+    }
+    if (disableBackendFallback) {
+      return {
+        ...onDeviceResult,
+        runtime: {
+          ...(onDeviceResult.runtime ?? {}),
+          fallbackSkipped: true,
+          fallbackFrom: RECOGNITION_ENGINES.ON_DEVICE,
+          fallbackReason: `On-device confidence ${onDeviceConfidence.toFixed(3)} below threshold ${fallbackThreshold.toFixed(3)}; backend fallback disabled`,
+          onDeviceConfidence,
+          onDeviceFallbackThreshold: fallbackThreshold,
+        },
+      };
     }
     return fallbackToBackendOrThrow({
       payload,
@@ -189,6 +225,20 @@ export async function recognizeItem({
         return onDeviceResult;
       }
 
+      if (disableBackendFallback) {
+        return {
+          ...onDeviceResult,
+          runtime: {
+            ...(onDeviceResult.runtime ?? {}),
+            fallbackSkipped: true,
+            fallbackFrom: RECOGNITION_ENGINES.ON_DEVICE,
+            fallbackReason: `On-device confidence ${onDeviceConfidence.toFixed(3)} below threshold ${fallbackThreshold.toFixed(3)}; backend fallback disabled`,
+            onDeviceConfidence,
+            onDeviceFallbackThreshold: fallbackThreshold,
+          },
+        };
+      }
+
       return fallbackToBackendOrThrow({
         payload,
         onDeviceResult,
@@ -198,6 +248,9 @@ export async function recognizeItem({
         fallbackThreshold,
       });
     } catch (onDeviceError) {
+      if (disableBackendFallback) {
+        throw onDeviceError;
+      }
       const fallback = await recognizeWithBackend({ payload, apiBaseUrl, authToken });
       return {
         ...fallback,
@@ -208,6 +261,10 @@ export async function recognizeItem({
         },
       };
     }
+  }
+
+  if (disableBackendFallback) {
+    throw new Error('On-device recognition is only available on iOS in this training build. Backend fallback is disabled.');
   }
 
   return recognizeWithBackend({ payload, apiBaseUrl, authToken });
