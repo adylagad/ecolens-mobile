@@ -15,6 +15,8 @@
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		E1A0C0012F00000100ABC123 /* ExecuTorchRecognizer.mm in Sources */ = {isa = PBXBuildFile; fileRef = E1A0C0002F00000100ABC123 /* ExecuTorchRecognizer.mm */; };
 		E1A0C0112F00000200ABC123 /* ETExecuTorchAdapter.mm in Sources */ = {isa = PBXBuildFile; fileRef = E1A0C0102F00000200ABC123 /* ETExecuTorchAdapter.mm */; };
+		E2B1D0212F10000300ABC123 /* model.pte in Resources */ = {isa = PBXBuildFile; fileRef = E2B1D0012F10000100ABC123 /* model.pte */; };
+		E2B1D0312F10000400ABC123 /* labels.json in Resources */ = {isa = PBXBuildFile; fileRef = E2B1D0112F10000200ABC123 /* labels.json */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -22,7 +24,7 @@
 		13B07F961A680F5B00A75B9A /* ecolensmobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ecolensmobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = ecolensmobile/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = ecolensmobile/Info.plist; sourceTree = "<group>"; };
-		311049884FF93FEA5AD2A5BA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = ecolensmobile/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		311049884FF93FEA5AD2A5BA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = ecolensmobile/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7708E5E15DBB5118BC344CE9 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-ecolensmobile/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		942C7EBC8929D86879E5E6BA /* libPods-ecolensmobile.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-ecolensmobile.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = ecolensmobile/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -31,6 +33,8 @@
 		D20BAD340B155039A4482F6A /* Pods-ecolensmobile.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ecolensmobile.debug.xcconfig"; path = "Target Support Files/Pods-ecolensmobile/Pods-ecolensmobile.debug.xcconfig"; sourceTree = "<group>"; };
 		E1A0C0002F00000100ABC123 /* ExecuTorchRecognizer.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExecuTorchRecognizer.mm; path = ecolensmobile/ExecuTorchRecognizer.mm; sourceTree = "<group>"; };
 		E1A0C0102F00000200ABC123 /* ETExecuTorchAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ETExecuTorchAdapter.mm; path = ecolensmobile/ETExecuTorchAdapter.mm; sourceTree = "<group>"; };
+		E2B1D0012F10000100ABC123 /* model.pte */ = {isa = PBXFileReference; lastKnownFileType = file; name = model.pte; path = ecolensmobile/model.pte; sourceTree = "<group>"; };
+		E2B1D0112F10000200ABC123 /* labels.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; name = labels.json; path = ecolensmobile/labels.json; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = ecolensmobile/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* ecolensmobile-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "ecolensmobile-Bridging-Header.h"; path = "ecolensmobile/ecolensmobile-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -56,6 +60,8 @@
 				E1A0C0002F00000100ABC123 /* ExecuTorchRecognizer.mm */,
 				F11748442D0722820044C1D9 /* ecolensmobile-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
+				E2B1D0012F10000100ABC123 /* model.pte */,
+				E2B1D0112F10000200ABC123 /* labels.json */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
@@ -126,7 +132,6 @@
 				D20BAD340B155039A4482F6A /* Pods-ecolensmobile.debug.xcconfig */,
 				ABF9FA54656E11DBF6EFCF94 /* Pods-ecolensmobile.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -203,6 +208,8 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				09D82667B09926BD2E7877B4 /* PrivacyInfo.xcprivacy in Resources */,
+				E2B1D0212F10000300ABC123 /* model.pte in Resources */,
+				E2B1D0312F10000400ABC123 /* labels.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -346,7 +353,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = ecolensmobile/ecolensmobile.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U9GQY85ZBA;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -368,6 +378,7 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.adylagad.ecolensmobile;
 				PRODUCT_NAME = ecolensmobile;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "ecolensmobile/ecolensmobile-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -383,7 +394,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = ecolensmobile/ecolensmobile.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U9GQY85ZBA;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"ET_ENABLE_EXECUTORCH_CPP=1",
@@ -403,6 +417,7 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.adylagad.ecolensmobile;
 				PRODUCT_NAME = ecolensmobile;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "ecolensmobile/ecolensmobile-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

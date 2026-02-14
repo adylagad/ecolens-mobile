@@ -38,6 +38,7 @@ detectAndSummarize(payload: {
   runtimeConfig?: {
     modelPath?: string,
     tokenizerPath?: string,
+    labelsPath?: string,
     preset?: string
   }
 }) -> Promise<object>
@@ -49,6 +50,7 @@ Also exposed for preloading:
 warmup(config: {
   modelPath?: string,
   tokenizerPath?: string,
+  labelsPath?: string,
   preset?: string
 }) -> Promise<{ ok: boolean }>
 ```
@@ -66,6 +68,7 @@ Current implementation location:
 - `ios/ecolensmobile/ETExecuTorchAdapter.mm` (exports all required symbols)
 - This file now contains an ExecuTorch C++ inference path guarded by `ET_ENABLE_EXECUTORCH_CPP`.
 - Default builds keep fallback heuristic inference enabled when ExecuTorch C++ headers/libs are not linked.
+- The adapter now loads optional class metadata from JSON (labels/classes) and maps top model outputs into richer summaries.
 
 To enable native ExecuTorch C++ path:
 - Add preprocessor define `ET_ENABLE_EXECUTORCH_CPP=1` for the iOS target.
@@ -86,6 +89,7 @@ The run function is expected to return a JSON string with fields such as:
 - `confidence`
 - `summary` / `suggestion`
 - `explanation`
+- `topPredictions` (optional top-k classes with probability)
 
 3. The returned object should match current result usage in `CameraScreen`:
 
@@ -99,6 +103,7 @@ The run function is expected to return a JSON string with fields such as:
 
 4. Integrate ExecuTorch runtime + model files in iOS project, then use EAS/custom dev client for testing.
 5. Replace scaffold inference in `ios/ecolensmobile/ExecuTorchRecognizer.mm` with real model output.
+   - done for top-1/top-k parsing + label-map support; next is model-specific prompt/summary tuning.
 
 ## Notes
 
@@ -108,6 +113,16 @@ The run function is expected to return a JSON string with fields such as:
 - JS runtime config is passed from env vars:
   - `EXPO_PUBLIC_EXECUTORCH_MODEL_PATH`
   - `EXPO_PUBLIC_EXECUTORCH_TOKENIZER_PATH`
+  - `EXPO_PUBLIC_EXECUTORCH_LABELS_PATH`
   - `EXPO_PUBLIC_EXECUTORCH_PRESET`
   - `EXPO_PUBLIC_EXECUTORCH_INPUT_WIDTH`
   - `EXPO_PUBLIC_EXECUTORCH_INPUT_HEIGHT`
+  - `EXPO_PUBLIC_ONDEVICE_FALLBACK_CONFIDENCE` (auto mode backend fallback threshold, default `0.45`)
+- Runtime path behavior:
+  - If `modelPath` / `labelsPath` is an existing file path, it is used directly.
+  - If it is a bundle-style value (for example `model.pte`, `labels.json`, `models/my_model.pte`), native code resolves it from app bundle resources.
+  - If unset, native code falls back to default bundled candidate names.
+- Quick setup:
+  1. Add `model.pte` and `labels.json` to iOS app bundle resources.
+  2. Copy `.env.example` to `.env.local` and adjust values if needed.
+  3. Rebuild iOS app (`npx expo run:ios`) so env vars are baked in.

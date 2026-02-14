@@ -68,10 +68,28 @@ target 'ecolensmobile' do
       end
     end
 
-    # ExecuTorch 0.2.0 ships iOS device static archives; keep full linkage on
-    # iphoneos and strip ExecuTorch archives from simulator link flags.
-    executorch_lib_regex = / -l"(backend_coreml_ios|backend_mps_ios|backend_xnnpack_ios|executorch_ios|kernels_custom_ios|kernels_optimized_ios|kernels_portable_ios|kernels_quantized_ios)"/
-    executorch_force_load_regex = / -force_load \$\(PODS_ROOT\)\/Executorch\/install\/lib\/lib(?:backend_coreml_ios|backend_mps_ios|backend_xnnpack_ios|executorch_ios|kernels_custom_ios|kernels_optimized_ios|kernels_portable_ios|kernels_quantized_ios)\.a/
+    # ExecuTorch 0.2.0 ships device-only archives. Keep simulator free of these
+    # flags and use a minimal set on device to avoid duplicate kernel registry
+    # initialization aborts at startup.
+    executorch_all_libs = %w[
+      backend_coreml_ios
+      backend_mps_ios
+      backend_xnnpack_ios
+      executorch_ios
+      kernels_custom_ios
+      kernels_optimized_ios
+      kernels_portable_ios
+      kernels_quantized_ios
+    ]
+    executorch_device_libs = %w[
+      backend_xnnpack_ios
+      executorch_ios
+      kernels_portable_ios
+    ]
+
+    executorch_lib_pattern = executorch_all_libs.join('|')
+    executorch_lib_regex = / -l"(?:#{executorch_lib_pattern})"/
+    executorch_force_load_regex = / -force_load \$\(PODS_ROOT\)\/Executorch\/install\/lib\/lib(?:#{executorch_lib_pattern})\.a/
     target_support_files = File.join(installer.sandbox.root.to_s, 'Target Support Files', 'Pods-ecolensmobile')
 
     Dir.glob(File.join(target_support_files, 'Pods-ecolensmobile.*.xcconfig')).each do |xcconfig_path|
@@ -79,10 +97,16 @@ target 'ecolensmobile' do
       ldflags_match = xcconfig.match(/^OTHER_LDFLAGS = (.+)$/)
       next if ldflags_match.nil?
 
-      device_ldflags = ldflags_match[1]
-      simulator_ldflags = device_ldflags
-                          .gsub(executorch_lib_regex, '')
-                          .gsub(executorch_force_load_regex, '')
+      current_ldflags = ldflags_match[1]
+      base_ldflags = current_ldflags
+                    .gsub(executorch_lib_regex, '')
+                    .gsub(executorch_force_load_regex, '')
+      executorch_device_ldflags = executorch_device_libs.map { |lib| %( -l"#{lib}") }.join
+      executorch_device_ldflags += executorch_device_libs.map { |lib|
+        " -force_load $(PODS_ROOT)/Executorch/install/lib/lib#{lib}.a"
+      }.join
+      device_ldflags = base_ldflags + executorch_device_ldflags
+      simulator_ldflags = base_ldflags
 
       xcconfig.sub!(/^OTHER_LDFLAGS = .+$/, "OTHER_LDFLAGS = #{simulator_ldflags}")
       xcconfig.gsub!(/^OTHER_LDFLAGS\[sdk=iphoneos\*\] = .+\n/, '')

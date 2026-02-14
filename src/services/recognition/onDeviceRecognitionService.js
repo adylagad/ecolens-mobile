@@ -14,6 +14,7 @@ function readNumberEnv(name, fallback) {
 function buildRuntimeConfig() {
   const modelPath = String(process.env?.EXPO_PUBLIC_EXECUTORCH_MODEL_PATH ?? '').trim();
   const tokenizerPath = String(process.env?.EXPO_PUBLIC_EXECUTORCH_TOKENIZER_PATH ?? '').trim();
+  const labelsPath = String(process.env?.EXPO_PUBLIC_EXECUTORCH_LABELS_PATH ?? '').trim();
   const preset = String(process.env?.EXPO_PUBLIC_EXECUTORCH_PRESET ?? 'balanced').trim() || 'balanced';
 
   const inputWidth = readNumberEnv('EXPO_PUBLIC_EXECUTORCH_INPUT_WIDTH', 224);
@@ -29,6 +30,9 @@ function buildRuntimeConfig() {
   }
   if (tokenizerPath) {
     config.tokenizerPath = tokenizerPath;
+  }
+  if (labelsPath) {
+    config.labelsPath = labelsPath;
   }
   return config;
 }

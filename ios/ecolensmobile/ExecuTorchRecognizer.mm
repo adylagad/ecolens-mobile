@@ -96,6 +96,71 @@ static NSNumber *ETFirstNumber(NSDictionary *dict, NSArray<NSString *> *keys, NS
   return fallback;
 }
 
+static NSString *ETNormalizePredictionName(NSString *value)
+{
+  NSString *trimmed = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (trimmed.length == 0) {
+    return @"";
+  }
+  NSMutableString *mutableText = [trimmed mutableCopy];
+  [mutableText replaceOccurrencesOfString:@"_" withString:@" " options:0 range:NSMakeRange(0, mutableText.length)];
+  [mutableText replaceOccurrencesOfString:@"-" withString:@" " options:0 range:NSMakeRange(0, mutableText.length)];
+  while ([mutableText containsString:@"  "]) {
+    [mutableText replaceOccurrencesOfString:@"  " withString:@" " options:0 range:NSMakeRange(0, mutableText.length)];
+  }
+  return [mutableText copy];
+}
+
+static NSArray<NSDictionary *> *ETNormalizeTopPredictions(id rawValue)
+{
+  NSArray *rawPredictions = ETArrayOrEmpty(rawValue);
+  if (rawPredictions.count == 0) {
+    return @[];
+  }
+
+  NSMutableArray<NSDictionary *> *normalized = [NSMutableArray arrayWithCapacity:rawPredictions.count];
+  NSMutableSet<NSString *> *seen = [NSMutableSet set];
+
+  for (id rawEntry in rawPredictions) {
+    NSDictionary *entry = ETDictionaryOrEmpty(rawEntry);
+    if (entry.count == 0) {
+      continue;
+    }
+
+    NSString *name = ETNormalizePredictionName(
+      ETFirstString(entry, @[ @"name", @"label", @"class", @"item" ], @"")
+    );
+    NSNumber *index = ETFirstNumber(entry, @[ @"index", @"id" ], nil);
+    NSNumber *probability = ETFirstNumber(entry, @[ @"probability", @"confidence", @"score" ], nil);
+
+    if (name.length == 0 && index == nil) {
+      continue;
+    }
+
+    NSString *dedupeKey = name.length > 0
+      ? [name lowercaseString]
+      : [NSString stringWithFormat:@"#%@", index ?: @(-1)];
+    if ([seen containsObject:dedupeKey]) {
+      continue;
+    }
+    [seen addObject:dedupeKey];
+
+    NSMutableDictionary *normalizedEntry = [NSMutableDictionary dictionary];
+    if (name.length > 0) {
+      normalizedEntry[@"name"] = name;
+    }
+    if (index != nil) {
+      normalizedEntry[@"index"] = index;
+    }
+    if (probability != nil) {
+      normalizedEntry[@"probability"] = probability;
+    }
+    [normalized addObject:normalizedEntry];
+  }
+
+  return normalized;
+}
+
 struct ETInputConfig {
   int32_t width = 224;
   int32_t height = 224;
@@ -389,6 +454,7 @@ public:
       : @[
           @{ @"code": @"model_output", @"label": @"Model output", @"detail": @"Derived from ExecuTorch inference response.", @"delta": @0 }
         ];
+    NSArray<NSDictionary *> *topPredictions = ETNormalizeTopPredictions(raw[@"topPredictions"]);
 
     result[@"title"] = title;
     result[@"name"] = name;
@@ -400,6 +466,9 @@ public:
     result[@"altRecommendation"] = summary;
     result[@"explanation"] = explanation;
     result[@"scoreFactors"] = scoreFactors;
+    if (topPredictions.count > 0) {
+      result[@"topPredictions"] = topPredictions;
+    }
 
     NSMutableDictionary *runtimeOut = [runtime mutableCopy] ?: [NSMutableDictionary dictionary];
     if (imageMetadata.count > 0) {
@@ -417,6 +486,7 @@ public:
 @property (nonatomic, strong) NSDate *lastWarmupAt;
 @property (nonatomic, copy) NSString *activeModelPath;
 @property (nonatomic, copy) NSString *activeTokenizerPath;
+@property (nonatomic, copy) NSString *activeLabelsPath;
 @property (nonatomic, copy) NSString *activePreset;
 @property (nonatomic, assign) BOOL initialized;
 @property (nonatomic, assign) ETInputConfig inputConfig;
@@ -469,6 +539,60 @@ public:
   return nil;
 }
 
+- (NSString *)resolveBundleLabelsPath
+{
+  NSArray<NSArray<NSString *> *> *candidates = @[
+    @[ @"labels", @"json" ],
+    @[ @"classes", @"json" ],
+    @[ @"label_map", @"json" ],
+    @[ @"imagenet_labels", @"json" ]
+  ];
+  for (NSArray<NSString *> *candidate in candidates) {
+    NSString *path = [[NSBundle mainBundle] pathForResource:candidate[0] ofType:candidate[1]];
+    if (path.length > 0) {
+      return path;
+    }
+  }
+  return nil;
+}
+
+- (NSString *)resolveBundlePathFromRuntimeValue:(NSString *)runtimeValue defaultExtension:(NSString *)defaultExtension
+{
+  NSString *trimmed = [runtimeValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (trimmed.length == 0) {
+    return nil;
+  }
+
+  // Absolute or app-sandbox file path.
+  NSString *existing = ETResolveExistingPath(trimmed);
+  if (existing.length > 0) {
+    return existing;
+  }
+
+  // Bundle resource path (supports values like "model.pte" or "models/model.pte").
+  NSString *directory = [trimmed stringByDeletingLastPathComponent];
+  if ([directory isEqualToString:@"."] || [directory isEqualToString:@"/"] || directory.length == 0) {
+    directory = nil;
+  }
+
+  NSString *leaf = [trimmed lastPathComponent];
+  NSString *extension = [leaf pathExtension];
+  NSString *resource = [leaf stringByDeletingPathExtension];
+
+  if (extension.length == 0 && defaultExtension.length > 0) {
+    extension = defaultExtension;
+    resource = leaf;
+  }
+  if (resource.length == 0) {
+    resource = leaf;
+  }
+
+  NSString *bundlePath = [[NSBundle mainBundle] pathForResource:resource
+                                                         ofType:extension.length > 0 ? extension : nil
+                                                    inDirectory:directory];
+  return bundlePath.length > 0 ? bundlePath : nil;
+}
+
 - (void)updateInputConfigFromRuntime:(NSDictionary *)runtimeConfig
 {
   NSNumber *requestedWidth = ETNumberFromUnknown(runtimeConfig[@"inputWidth"]);
@@ -515,10 +639,16 @@ public:
 
   NSString *requestedModelPath = ETStringOrEmpty(runtimeConfig[@"modelPath"]);
   NSString *requestedTokenizerPath = ETStringOrEmpty(runtimeConfig[@"tokenizerPath"]);
+  NSString *requestedLabelsPath = ETStringOrEmpty(runtimeConfig[@"labelsPath"]);
   NSString *requestedPreset = ETStringOrEmpty(runtimeConfig[@"preset"]);
 
-  NSString *resolvedModelPath = ETResolveExistingPath(requestedModelPath) ?: [self resolveBundleModelPath];
-  NSString *resolvedTokenizerPath = ETResolveExistingPath(requestedTokenizerPath) ?: [self resolveBundleTokenizerPath];
+  NSString *resolvedModelPath =
+    [self resolveBundlePathFromRuntimeValue:requestedModelPath defaultExtension:@"pte"] ?: [self resolveBundleModelPath];
+  NSString *resolvedTokenizerPath =
+    [self resolveBundlePathFromRuntimeValue:requestedTokenizerPath defaultExtension:@"json"] ?: [self resolveBundleTokenizerPath];
+  NSString *resolvedLabelsPath =
+    [self resolveBundlePathFromRuntimeValue:requestedLabelsPath defaultExtension:@"json"] ?: [self resolveBundleLabelsPath];
+  NSString *adapterMetadataPath = resolvedLabelsPath.length > 0 ? resolvedLabelsPath : (resolvedTokenizerPath ?: @"");
   NSString *resolvedPreset = requestedPreset.length > 0 ? requestedPreset : @"balanced";
 
   if (resolvedModelPath.length == 0) {
@@ -529,7 +659,7 @@ public:
   }
 
   NSString *bridgeError = nil;
-  if (!_runtimeBridge->loadModel(resolvedModelPath, resolvedTokenizerPath ?: @"", resolvedPreset, &bridgeError)) {
+  if (!_runtimeBridge->loadModel(resolvedModelPath, adapterMetadataPath, resolvedPreset, &bridgeError)) {
     if (error != nullptr) {
       *error = ETMakeError(3002, bridgeError ?: @"Failed to load ExecuTorch model.");
     }
@@ -538,6 +668,7 @@ public:
 
   self.activeModelPath = resolvedModelPath ?: @"";
   self.activeTokenizerPath = resolvedTokenizerPath ?: @"";
+  self.activeLabelsPath = resolvedLabelsPath ?: @"";
   self.activePreset = resolvedPreset;
   self.lastWarmupAt = [NSDate date];
   self.initialized = YES;
@@ -636,6 +767,7 @@ public:
     @"source": @"executorch-c-abi",
     @"modelPath": self.activeModelPath ?: @"",
     @"tokenizerPath": self.activeTokenizerPath ?: @"",
+    @"labelsPath": self.activeLabelsPath ?: @"",
     @"preset": self.activePreset ?: @"balanced",
     @"warmupAt": self.lastWarmupAt ? @([self.lastWarmupAt timeIntervalSince1970] * 1000.0) : @0
   };
@@ -695,6 +827,7 @@ RCT_REMAP_METHOD(
     @"ok": @YES,
     @"modelPath": self.pipeline.activeModelPath ?: @"",
     @"tokenizerPath": self.pipeline.activeTokenizerPath ?: @"",
+    @"labelsPath": self.pipeline.activeLabelsPath ?: @"",
     @"preset": self.pipeline.activePreset ?: @"balanced"
   });
 }
